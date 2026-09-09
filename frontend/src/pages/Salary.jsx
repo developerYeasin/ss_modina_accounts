@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Save, Plus, Users, Pencil, Trash2, Download } from 'lucide-react';
+import { Save, Plus, Users, Pencil, Trash2, Download, HandCoins } from 'lucide-react';
 import { Salary, Staff } from '@/api/entities';
 import {
   Button, Card, CardContent, CardHeader, CardTitle, Loading, ErrorState, Input,
   Select, Dialog, Field, Checkbox, ConfirmDialog, Tabs, Badge,
 } from '@/components/ui';
 import { useToast } from '@/components/ui/toast';
-import { PageHeader, DataTable, StatCard, EmptyState } from '@/components/shared';
-import { BN_MONTH_NAMES, downloadCsv, money, num, toBnDigits } from '@/lib/utils';
+import { PageHeader, DataTable, StatCard, EmptyState, PAYMENT_METHODS } from '@/components/shared';
+import { BN_MONTH_NAMES, bnDate, downloadCsv, isoDate, money, num, toBnDigits } from '@/lib/utils';
 import { useSettings } from '@/hooks/useSettings';
 
 const staffBlank = { name: '', position: '', phone: '', base_salary: '', active: true };
@@ -34,6 +34,8 @@ export default function SalaryPage() {
   const [busy, setBusy] = useState(false);
   const [editingStaff, setEditingStaff] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [advanceOpen, setAdvanceOpen] = useState(false);
+  const [deleteAdvance, setDeleteAdvance] = useState(null);
 
   const { data: sheet, isLoading, error, refetch } = useQuery({
     queryKey: ['salary-sheet', year, month],
@@ -43,6 +45,20 @@ export default function SalaryPage() {
   const { data: staff = [] } = useQuery({
     queryKey: ['staff-all'], queryFn: () => Staff.list('-created_date', 200),
   });
+
+  const { data: advanceData, refetch: refetchAdvances } = useQuery({
+    queryKey: ['salary-advances', year, month],
+    queryFn: () => Salary.advances(year, month),
+  });
+  const advances = advanceData?.entries || [];
+
+  /** Advances and the sheet read the same rows, so refresh both together. */
+  const refreshAdvances = () => {
+    refetchAdvances();
+    refetch();
+    queryClient.invalidateQueries({ queryKey: ['expenses'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+  };
 
   useEffect(() => {
     if (sheet) setRows(sheet.rows);
@@ -90,6 +106,24 @@ export default function SalaryPage() {
                 <Save className="h-4 w-4" /> সংরক্ষণ
               </Button>
             </>
+          ) : tab === 'advance' ? (
+            <>
+              <Button
+                variant="outline" size="sm"
+                onClick={() => downloadCsv(`advances-${year}-${month}`, advances, [
+                  { key: 'date', label: 'Date' },
+                  { key: 'staff_name', label: 'Staff' },
+                  { key: 'amount', label: 'Amount' },
+                  { key: 'method', label: 'Method' },
+                  { key: 'notes', label: 'Notes' },
+                ])}
+              >
+                <Download className="h-4 w-4" /> CSV
+              </Button>
+              <Button size="sm" onClick={() => setAdvanceOpen(true)}>
+                <Plus className="h-4 w-4" /> অগ্রিম দিন
+              </Button>
+            </>
           ) : (
             <Button size="sm" onClick={() => setEditingStaff(staffBlank)}>
               <Plus className="h-4 w-4" /> নতুন কর্মী
@@ -101,6 +135,7 @@ export default function SalaryPage() {
       <Tabs
         tabs={[
           { value: 'sheet', label: 'মাসিক শিট' },
+          { value: 'advance', label: 'অগ্রিম', count: advances.length },
           { value: 'staff', label: 'কর্মী', count: staff.length },
         ]}
         value={tab}
@@ -151,7 +186,7 @@ export default function SalaryPage() {
                       <th className="text-right">শুক্রবার</th>
                       <th className="text-right">লাঞ্চ দিন</th>
                       <th className="text-right">লাঞ্চ ভাতা</th>
-                      <th className="text-right">অগ্রিম</th>
+                      <th className="text-right">অগ্রিম (মাসে নেওয়া)</th>
                       <th className="text-right">মালিকের পাওনা</th>
                       <th className="text-right">পূর্বের বাকি</th>
                       <th className="text-right">নিট প্রদেয়</th>
@@ -180,7 +215,17 @@ export default function SalaryPage() {
                         <td className="num text-right text-muted-foreground">
                           {money(num(r.lunch_days) * num(lunchRate), currency)}
                         </td>
-                        {['advance', 'owner_due', 'previous_due'].map((key) => (
+                        <td className="num text-right">
+                          <button
+                            type="button"
+                            onClick={() => setTab('advance')}
+                            className="font-medium text-primary hover:underline"
+                            title="অগ্রিম ট্যাব থেকে যোগ বা বাদ করুন"
+                          >
+                            {money(r.advance, currency)}
+                          </button>
+                        </td>
+                        {['owner_due', 'previous_due'].map((key) => (
                           <td key={key} className="text-right">
                             <Input
                               type="number" step="0.01"
@@ -210,6 +255,97 @@ export default function SalaryPage() {
               </div>
             )
           )}
+        </>
+      ) : tab === 'advance' ? (
+        <>
+          <Card className="mb-4">
+            <CardContent className="grid gap-3 pt-4 sm:grid-cols-2 lg:grid-cols-4">
+              <Field label="বছর">
+                <Select value={year} onChange={(e) => setYear(Number(e.target.value))}>
+                  {Array.from({ length: 7 }, (_, i) => now.getFullYear() - 3 + i).map((y) => (
+                    <option key={y} value={y}>{toBnDigits(y)}</option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="মাস">
+                <Select value={month} onChange={(e) => setMonth(Number(e.target.value))}>
+                  {BN_MONTH_NAMES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+                </Select>
+              </Field>
+              <StatCard
+                label="এই মাসে অগ্রিম"
+                value={advanceData?.total || 0}
+                currency={currency} tone="danger" icon={HandCoins}
+              />
+              <StatCard label="এন্ট্রি" value={advances.length} currency={false} tone="info" />
+            </CardContent>
+          </Card>
+
+          {advanceData?.by_staff?.length > 0 && (
+            <Card className="mb-4">
+              <CardHeader><CardTitle>কর্মীভিত্তিক মোট</CardTitle></CardHeader>
+              <CardContent className="divide-y">
+                {advanceData.by_staff.map((s) => (
+                  <div key={s.staff_id} className="flex items-center justify-between py-2 text-sm">
+                    <span className="font-medium">{s.staff_name}</span>
+                    <span className="flex items-center gap-4">
+                      <span className="text-muted-foreground">{s.count} বার</span>
+                      <span className="num font-semibold text-destructive">
+                        {money(s.total, currency)}
+                      </span>
+                    </span>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          <DataTable
+            columns={[
+              { key: 'date', label: 'তারিখ', render: (a) => bnDate(a.date) },
+              { key: 'staff_name', label: 'কর্মী', render: (a) => (
+                <span className="font-medium">{a.staff_name}</span>
+              ) },
+              { key: 'method', label: 'মাধ্যম' },
+              { key: 'notes', label: 'নোট', render: (a) => a.notes || '—' },
+              { key: 'amount', label: 'পরিমাণ', align: 'right', render: (a) => (
+                <span className="num font-semibold text-destructive">{money(a.amount, currency)}</span>
+              ) },
+              { key: 'actions', label: '', align: 'right', render: (a) => (
+                <Button
+                  variant="ghost" size="icon"
+                  onClick={() => setDeleteAdvance(a)}
+                  aria-label="মুছুন"
+                >
+                  <Trash2 className="h-4 w-4 text-destructive" />
+                </Button>
+              ) },
+            ]}
+            rows={advances}
+            empty={
+              <EmptyState
+                icon={HandCoins}
+                title="এই মাসে কোনো অগ্রিম নেই"
+                description="কর্মীকে অগ্রিম দিলে তা এখানে জমা হবে, খরচের খাতায় যোগ হবে এবং মাসিক বেতন থেকে কাটা পড়বে।"
+                action={<Button size="sm" onClick={() => setAdvanceOpen(true)}>
+                  <Plus className="h-4 w-4" /> অগ্রিম দিন
+                </Button>}
+              />
+            }
+            mobileCard={(a) => (
+              <div className="space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium">{a.staff_name}</span>
+                  <span className="num font-semibold text-destructive">
+                    {money(a.amount, currency)}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {[bnDate(a.date), a.method, a.notes].filter(Boolean).join(' · ')}
+                </p>
+              </div>
+            )}
+          />
         </>
       ) : (
         <DataTable
@@ -255,6 +391,27 @@ export default function SalaryPage() {
           queryClient.invalidateQueries({ queryKey: ['staff-all'] });
           queryClient.invalidateQueries({ queryKey: ['staff'] });
           refetch();
+        }}
+      />
+
+      <AdvanceDialog
+        open={advanceOpen}
+        onClose={() => setAdvanceOpen(false)}
+        staff={staff.filter((s) => s.active)}
+        year={year}
+        month={month}
+        onSaved={() => { setAdvanceOpen(false); refreshAdvances(); }}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleteAdvance)}
+        onClose={() => setDeleteAdvance(null)}
+        title="অগ্রিম মুছবেন?"
+        message={`${deleteAdvance?.staff_name} — ${money(deleteAdvance?.amount, currency)}। খরচের খাতা থেকেও এন্ট্রিটি মুছে যাবে।`}
+        onConfirm={async () => {
+          await Salary.deleteAdvance(deleteAdvance.id);
+          refreshAdvances();
+          toast({ title: 'অগ্রিম মুছে ফেলা হয়েছে' });
         }}
       />
 
@@ -344,6 +501,105 @@ function StaffDialog({ staff, onClose, onSaved }) {
         <div className="sm:col-span-2">
           <Checkbox checked={form.active} onChange={(v) => set('active', v)} label="সক্রিয় কর্মী" />
         </div>
+      </div>
+    </Dialog>
+  );
+}
+
+/**
+ * Hand an advance to a staff member. The backend books a matching expense, so
+ * the cash shows up in খরচ and the month's salary drops by the same amount —
+ * nothing has to be typed twice.
+ */
+function AdvanceDialog({ open, onClose, staff, year, month, onSaved }) {
+  const { toast } = useToast();
+  const { currency } = useSettings();
+  const [form, setForm] = useState({
+    staff_id: '', date: isoDate(), amount: '', method: 'Cash', notes: '',
+  });
+  const [busy, setBusy] = useState(false);
+
+  const selected = staff.find((s) => s.id === form.staff_id);
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  async function save() {
+    if (!form.staff_id) {
+      toast({ title: 'কর্মী নির্বাচন করুন', variant: 'destructive' });
+      return;
+    }
+    if (!num(form.amount)) {
+      toast({ title: 'পরিমাণ দিন', variant: 'destructive' });
+      return;
+    }
+    setBusy(true);
+    try {
+      await Salary.addAdvance(form);
+      toast({ title: 'অগ্রিম যোগ হয়েছে', description: 'খরচের খাতায়ও যুক্ত হয়েছে' });
+      setForm({ staff_id: '', date: isoDate(), amount: '', method: 'Cash', notes: '' });
+      onSaved();
+    } catch (err) {
+      toast({ title: 'সংরক্ষণ করা যায়নি', description: err.message, variant: 'destructive' });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title="কর্মীকে অগ্রিম"
+      description={`${BN_MONTH_NAMES[month - 1]} ${toBnDigits(year)} — মাসিক বেতন থেকে কাটা পড়বে`}
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose}>বাতিল</Button>
+          <Button loading={busy} onClick={save}>সংরক্ষণ</Button>
+        </>
+      }
+    >
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="কর্মী" required className="sm:col-span-2">
+          <Select value={form.staff_id} onChange={(e) => set('staff_id', e.target.value)}>
+            <option value="">নির্বাচন করুন</option>
+            {staff.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}{s.position ? ` — ${s.position}` : ''}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="তারিখ" required>
+          <Input type="date" value={form.date} onChange={(e) => set('date', e.target.value)} />
+        </Field>
+        <Field label="পরিমাণ" required>
+          <Input
+            type="number" step="0.01" min="0" autoFocus value={form.amount}
+            onChange={(e) => set('amount', e.target.value)}
+          />
+        </Field>
+        <Field label="মাধ্যম">
+          <Select value={form.method} onChange={(e) => set('method', e.target.value)}>
+            {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
+          </Select>
+        </Field>
+        <Field label="নোট">
+          <Input value={form.notes} onChange={(e) => set('notes', e.target.value)} />
+        </Field>
+
+        {selected && (
+          <div className="divide-y rounded-lg border border-white/60 bg-white/60 p-3 sm:col-span-2">
+            <div className="flex justify-between py-1.5 text-sm">
+              <span className="text-muted-foreground">মূল বেতন</span>
+              <span className="num font-medium">{money(selected.base_salary, currency)}</span>
+            </div>
+            <div className="flex justify-between py-1.5 text-sm">
+              <span className="text-muted-foreground">এই অগ্রিমের পর অবশিষ্ট</span>
+              <span className="num font-semibold">
+                {money(num(selected.base_salary) - num(form.amount), currency)}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
     </Dialog>
   );

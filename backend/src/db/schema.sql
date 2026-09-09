@@ -467,3 +467,51 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 SET FOREIGN_KEY_CHECKS = 1;
+
+-- ============================================================
+-- Staff advances & supplier payments
+-- ============================================================
+
+-- ---------- Staff advance (মাসিক অগ্রিম) ----------
+-- Each row is one dated hand-out. The month's salary sheet reads the sum of
+-- these as its advance, and every row also books an expense so the cash shows
+-- up in the খরচ ledger.
+CREATE TABLE IF NOT EXISTS staff_advances (
+  id          CHAR(24) NOT NULL PRIMARY KEY,
+  staff_id    CHAR(24) NOT NULL,
+  staff_name  VARCHAR(190) NULL,
+  date        DATE NOT NULL,
+  year        INT NOT NULL,
+  month       INT NOT NULL,
+  amount      DECIMAL(14,2) NOT NULL DEFAULT 0,
+  method      VARCHAR(30) NOT NULL DEFAULT 'Cash',
+  expense_id  CHAR(24) NULL,
+  notes       TEXT NULL,
+  created_date  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_date  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  created_by_id CHAR(24) NULL,
+  INDEX idx_advance_staff (staff_id),
+  INDEX idx_advance_period (year, month),
+  INDEX idx_advance_date (date),
+  CONSTRAINT fk_advance_staff FOREIGN KEY (staff_id) REFERENCES staff(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------- Supplier payment (সরবরাহকারীকে পরিশোধ) ----------
+-- Payments made against the supplier's running balance, not against one
+-- purchase — so an old due and today's bill settle from the same pot.
+CREATE TABLE IF NOT EXISTS supplier_payments (
+  id            CHAR(24) NOT NULL PRIMARY KEY,
+  supplier_id   CHAR(24) NOT NULL,
+  supplier_name VARCHAR(190) NULL,
+  date          DATE NOT NULL,
+  amount        DECIMAL(14,2) NOT NULL DEFAULT 0,
+  method        VARCHAR(30) NOT NULL DEFAULT 'Cash',
+  reference     VARCHAR(120) NULL,
+  notes         TEXT NULL,
+  created_date  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_date  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  created_by_id CHAR(24) NULL,
+  INDEX idx_suppay_supplier (supplier_id),
+  INDEX idx_suppay_date (date),
+  CONSTRAINT fk_suppay_supplier FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

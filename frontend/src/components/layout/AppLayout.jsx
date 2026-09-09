@@ -20,9 +20,9 @@ export default function AppLayout() {
   }, [pathname]);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="relative min-h-screen">
       {/* desktop sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 lg:block">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 lg:block print:hidden">
         <Sidebar />
       </aside>
 
@@ -36,9 +36,9 @@ export default function AppLayout() {
         </div>
       )}
 
-      <div className="lg:pl-64">
+      <div className="relative lg:pl-60 print:pl-0">
         {/* top bar — mobile only, plus quick actions everywhere */}
-        <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b bg-background/95 px-3 backdrop-blur lg:px-6">
+        <header className="glass-nav sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-white/40 px-3 lg:px-8 print:hidden">
           <Button
             variant="ghost"
             size="icon"
@@ -66,7 +66,7 @@ export default function AppLayout() {
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-7xl animate-fade-in p-3 pb-24 sm:p-4 lg:p-6">
+        <main className="mx-auto w-full max-w-6xl animate-fade-in px-4 py-4 pb-24 lg:px-8 lg:py-6 lg:pb-8 print:max-w-none print:px-0 print:py-0">
           <Outlet />
         </main>
       </div>

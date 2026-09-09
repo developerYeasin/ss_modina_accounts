@@ -42,6 +42,8 @@ router.get('/reports/dashboard', reports.dashboard);
 router.get('/reports/daily', reports.daily);
 router.get('/reports/range', reports.range);
 router.get('/reports/due', reports.dueList);
+router.get('/reports/expense-monthly', reports.expenseMonthly);
+router.get('/reports/expense-category', reports.expenseByCategory);
 router.get('/reports/customer/:id/statement', reports.customerStatement);
 router.get('/search', reports.globalSearch);
 
@@ -60,7 +62,10 @@ router.patch('/customers/:id', domain.updateCustomer);
 router.get('/customers/:id/detail', domain.customerDetail);
 
 router.post('/purchases', domain.createPurchase);
+router.get('/suppliers/due', domain.supplierDueList);
 router.get('/suppliers/:id/detail', domain.supplierDetail);
+router.post('/suppliers/:id/payments', domain.createSupplierPayment);
+router.delete('/suppliers/:id/payments/:paymentId', domain.deleteSupplierPayment);
 
 router.get('/loans/:id/detail', domain.loanDetail);
 router.post('/loans/:id/txns', domain.createLoanTxn);
@@ -74,6 +79,9 @@ router.post('/quotations/:id/convert', domain.convertQuotation);
 
 router.get('/salary/sheet', domain.salarySheet);
 router.post('/salary/sheet', requireRole('manager'), domain.saveSalarySheet);
+router.get('/salary/advances', domain.staffAdvanceReport);
+router.post('/salary/advances', requireRole('manager'), domain.createStaffAdvance);
+router.delete('/salary/advances/:id', requireRole('manager'), domain.deleteStaffAdvance);
 
 router.get('/price-catalog', domain.priceCatalog);
 

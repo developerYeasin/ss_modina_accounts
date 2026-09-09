@@ -44,6 +44,8 @@ export const LabourSetting = entityClient('LabourSetting');
 export const PriceHistory = entityClient('PriceHistory');
 export const SalaryEntry = entityClient('SalaryEntry');
 export const Quotation = entityClient('Quotation');
+export const StaffAdvance = entityClient('StaffAdvance');
+export const SupplierPayment = entityClient('SupplierPayment');
 export const AuditLog = entityClient('AuditLog');
 
 /** Endpoints that carry business rules, so the UI never recomputes them. */
@@ -83,7 +85,13 @@ export const Customers = {
 };
 
 export const Purchases = { create: (data) => api.post('/purchases', data) };
-export const Suppliers = { detail: (id) => api.get(`/suppliers/${id}/detail`) };
+
+export const Suppliers = {
+  detail: (id) => api.get(`/suppliers/${id}/detail`),
+  dueList: () => api.get('/suppliers/due'),
+  addPayment: (id, data) => api.post(`/suppliers/${id}/payments`, data),
+  deletePayment: (id, paymentId) => api.del(`/suppliers/${id}/payments/${paymentId}`),
+};
 
 export const Loans = {
   detail: (id) => api.get(`/loans/${id}/detail`),
@@ -104,6 +112,9 @@ export const Quotations = {
 export const Salary = {
   sheet: (year, month) => api.get(`/salary/sheet${toQuery({ year, month })}`),
   save: (payload) => api.post('/salary/sheet', payload),
+  advances: (year, month) => api.get(`/salary/advances${toQuery({ year, month })}`),
+  addAdvance: (data) => api.post('/salary/advances', data),
+  deleteAdvance: (id) => api.del(`/salary/advances/${id}`),
 };
 
 export const Reports = {
@@ -111,6 +122,8 @@ export const Reports = {
   daily: (date) => api.get(`/reports/daily${toQuery({ date })}`),
   range: (params) => api.get(`/reports/range${toQuery(params)}`),
   due: () => api.get('/reports/due'),
+  expenseMonthly: (params) => api.get(`/reports/expense-monthly${toQuery(params)}`),
+  expenseCategory: (params) => api.get(`/reports/expense-category${toQuery(params)}`),
 };
 
 export const Search = { global: (q) => api.get(`/search${toQuery({ q })}`) };

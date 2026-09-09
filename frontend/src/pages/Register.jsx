@@ -26,8 +26,8 @@ export default function Register() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-secondary via-background to-muted p-4">
-      <Card className="w-full max-w-sm p-6">
+    <div className="flex min-h-screen items-center justify-center p-4">
+      <Card className="glass w-full max-w-sm p-6">
         <div className="mb-6 text-center">
           <h1 className="font-heading text-2xl font-bold">নতুন অ্যাকাউন্ট</h1>
           <p className="mt-1 text-sm text-muted-foreground">SS Modina হিসাব ব্যবহার শুরু করুন</p>

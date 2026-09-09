@@ -63,7 +63,31 @@ const registry = {
     table: 'suppliers',
     sort: '-created_date',
     search: ['name', 'mobile', 'business', 'materials_supplied'],
-    fields: { name: S, mobile: S, address: S, business: S, materials_supplied: S, notes: S },
+    fields: {
+      name: S, mobile: S, address: S, business: S, materials_supplied: S,
+      opening_due: N, notes: S,
+    },
+  },
+
+  SupplierPayment: {
+    table: 'supplier_payments',
+    sort: '-date',
+    search: ['supplier_name', 'reference', 'notes'],
+    fields: {
+      supplier_id: S, supplier_name: S, date: D, amount: N, method: S,
+      reference: S, notes: S,
+    },
+  },
+
+  StaffAdvance: {
+    table: 'staff_advances',
+    sort: '-date',
+    search: ['staff_name', 'notes'],
+    roles: { write: 'manager', delete: 'manager' },
+    fields: {
+      staff_id: S, staff_name: S, date: D, year: N, month: N, amount: N,
+      method: S, expense_id: S, notes: S,
+    },
   },
 
   Order: {

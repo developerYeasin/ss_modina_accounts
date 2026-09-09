@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 const BUTTON_VARIANTS = {
   default: 'bg-primary text-primary-foreground hover:bg-primary/90',
   accent: 'bg-accent text-accent-foreground hover:bg-accent/90',
-  outline: 'border border-input bg-card hover:bg-muted',
+  outline: 'border border-white/60 bg-white/70 hover:bg-white/90',
   ghost: 'hover:bg-muted',
   secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
   destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
@@ -47,7 +47,7 @@ export const Button = forwardRef(function Button(
 /* -------------------------------- Card -------------------------------- */
 
 export const Card = ({ className, ...props }) => (
-  <div className={cn('rounded-lg border bg-card shadow-sm', className)} {...props} />
+  <div className={cn('glass-card rounded-xl', className)} {...props} />
 );
 export const CardHeader = ({ className, ...props }) => (
   <div className={cn('flex flex-col gap-1 p-4 pb-2', className)} {...props} />
@@ -68,7 +68,7 @@ export const CardFooter = ({ className, ...props }) => (
 /* ------------------------------- Inputs ------------------------------- */
 
 const fieldClass =
-  'flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm ' +
+  'flex h-10 w-full rounded-md border border-white/60 bg-white/70 px-3 py-2 text-sm ' +
   'placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 ' +
   'focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
 
@@ -121,7 +121,7 @@ export function Checkbox({ checked, onChange, label, className, ...props }) {
       <span
         className={cn(
           'flex h-5 w-5 items-center justify-center rounded border transition-colors',
-          checked ? 'border-primary bg-primary text-primary-foreground' : 'border-input bg-card',
+          checked ? 'border-primary bg-primary text-primary-foreground' : 'border-white/60 bg-white/70',
         )}
       >
         {checked && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
@@ -183,7 +183,7 @@ export function Dialog({ open, onClose, title, description, children, footer, si
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div
         className={cn(
-          'relative z-10 flex max-h-[92vh] w-full flex-col rounded-t-xl bg-card shadow-lg sm:rounded-xl',
+          'glass relative z-10 flex max-h-[92vh] w-full flex-col rounded-t-2xl shadow-xl sm:rounded-2xl',
           widths[size],
         )}
       >
@@ -237,7 +237,7 @@ export function ConfirmDialog({ open, onClose, onConfirm, title, message, confir
 
 export function Tabs({ tabs, value, onChange, className }) {
   return (
-    <div className={cn('flex gap-1 overflow-x-auto rounded-lg bg-muted p-1', className)}>
+    <div className={cn('flex gap-1 overflow-x-auto rounded-xl bg-white/50 p-1 backdrop-blur', className)}>
       {tabs.map((t) => (
         <button
           key={t.value}
@@ -246,7 +246,7 @@ export function Tabs({ tabs, value, onChange, className }) {
           className={cn(
             'whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
             value === t.value
-              ? 'bg-card text-foreground shadow-sm'
+              ? 'bg-white/90 text-foreground shadow-sm'
               : 'text-muted-foreground hover:text-foreground',
           )}
         >
@@ -274,7 +274,7 @@ export const Loading = ({ label = 'লোড হচ্ছে…' }) => (
 
 export function EmptyState({ icon: Icon, title, description, action }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed bg-card/50 px-6 py-14 text-center">
+    <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/70 bg-white/50 px-6 py-14 text-center backdrop-blur">
       {Icon && <Icon className="h-8 w-8 text-muted-foreground/60" />}
       <p className="font-medium">{title}</p>
       {description && <p className="max-w-sm text-sm text-muted-foreground">{description}</p>}

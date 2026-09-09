@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Truck, Trash2, Pencil } from 'lucide-react';
-import { Supplier, Purchase } from '@/api/entities';
+import { Supplier, Suppliers as SuppliersApi } from '@/api/entities';
 import {
   Button, Loading, ErrorState, EmptyState, Dialog, Field, Input, Textarea, ConfirmDialog,
 } from '@/components/ui';
@@ -11,7 +11,10 @@ import { PageHeader, SearchInput, DataTable, StatCard } from '@/components/share
 import { money, num } from '@/lib/utils';
 import { useSettings } from '@/hooks/useSettings';
 
-const blank = { name: '', mobile: '', address: '', business: '', materials_supplied: '', notes: '' };
+const blank = {
+  name: '', mobile: '', address: '', business: '', materials_supplied: '',
+  opening_due: 0, notes: '',
+};
 
 export default function Suppliers() {
   const navigate = useNavigate();
@@ -26,21 +29,17 @@ export default function Suppliers() {
   const { data: suppliers = [], isLoading, error, refetch } = useQuery({
     queryKey: ['suppliers'], queryFn: () => Supplier.list('name'),
   });
-  const { data: purchases = [] } = useQuery({
-    queryKey: ['purchases'], queryFn: () => Purchase.list('-date', 1000),
+  const { data: dueRows = [] } = useQuery({
+    queryKey: ['supplier-due'], queryFn: () => SuppliersApi.dueList(),
   });
 
-  const stats = useMemo(() => {
-    const map = new Map();
-    purchases.forEach((p) => {
-      const cur = map.get(p.supplier_id) || { count: 0, total: 0, due: 0 };
-      cur.count += 1;
-      cur.total += num(p.total_cost);
-      cur.due += num(p.due);
-      map.set(p.supplier_id, cur);
-    });
-    return map;
-  }, [purchases]);
+  /** id -> { count, total, due }, where due already carries the opening balance. */
+  const stats = useMemo(
+    () => new Map(dueRows.map((r) => [r.id, {
+      count: r.purchases, total: r.billed, due: r.due, paid: r.paid,
+    }])),
+    [dueRows],
+  );
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -52,6 +51,7 @@ export default function Suppliers() {
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['suppliers'] });
+    queryClient.invalidateQueries({ queryKey: ['supplier-due'] });
     queryClient.invalidateQueries({ queryKey: ['purchases'] });
   };
 
@@ -213,6 +213,12 @@ function SupplierDialog({ supplier, onClose, onSaved }) {
         </Field>
         <Field label="ঠিকানা" className="sm:col-span-2">
           <Input value={form.address} onChange={(e) => set('address', e.target.value)} />
+        </Field>
+        <Field label="পূর্বের পাওনা" hint="আগের খাতায় যত টাকা বাকি ছিল">
+          <Input
+            type="number" step="0.01" value={form.opening_due}
+            onChange={(e) => set('opening_due', e.target.value)}
+          />
         </Field>
         <Field label="সরবরাহকৃত ম্যাটেরিয়াল" className="sm:col-span-2">
           <Input

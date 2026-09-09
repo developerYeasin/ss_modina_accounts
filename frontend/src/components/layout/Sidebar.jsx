@@ -44,8 +44,8 @@ function NavItem({ to, label, icon: Icon, onNavigate }) {
         cn(
           'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
           isActive
-            ? 'bg-sidebar-primary text-sidebar-primary-foreground'
-            : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+            ? 'glass-active text-primary'
+            : 'text-sidebar-foreground hover:bg-white/60',
         )
       }
     >
@@ -60,9 +60,9 @@ export default function Sidebar({ onNavigate }) {
   const { user, isAdmin } = useAuth();
 
   return (
-    <div className="flex h-full flex-col border-r border-sidebar-border bg-sidebar">
+    <div className="glass-nav flex h-full flex-col border-r border-white/40">
       {/* brand */}
-      <div className="flex items-center gap-3 border-b border-sidebar-border p-4">
+      <div className="flex items-center gap-3 border-b border-white/40 p-4">
         {setting.logo_url ? (
           <img src={setting.logo_url} alt="logo" className="h-10 w-10 rounded-md object-contain" />
         ) : (
@@ -100,11 +100,11 @@ export default function Sidebar({ onNavigate }) {
         )}
       </nav>
 
-      <div className="border-t border-sidebar-border p-3">
+      <div className="border-t border-white/40 p-3">
         <NavLink
           to="/settings/profile"
           onClick={onNavigate}
-          className="flex items-center gap-3 rounded-md p-2 hover:bg-sidebar-accent"
+          className="flex items-center gap-3 rounded-md p-2 hover:bg-white/60"
         >
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-sm font-semibold uppercase text-primary-foreground">
             {(user?.full_name || user?.email || '?').charAt(0)}

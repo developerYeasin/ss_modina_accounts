@@ -205,6 +205,91 @@ const customerStatement = asyncH(async (req, res) => {
   });
 });
 
+/**
+ * GET /api/reports/expense-monthly?year=&category=
+ *
+ * Category × month grid for one year: how much গাড়ি ভাড়া, দোকান ভাড়া, লাঞ্চ
+ * and every other head cost each month, with row and column totals — the
+ * monthly view that sits on top of the daily খরচ entries.
+ */
+const expenseMonthly = asyncH(async (req, res) => {
+  const year = Number(req.query.year) || new Date().getFullYear();
+  const category = req.query.category || null;
+
+  const params = [year];
+  let filter = '';
+  if (category) {
+    filter = ' AND category = ?';
+    params.push(category);
+  }
+
+  const rows = await query(
+    `SELECT category, MONTH(date) AS month,
+            COALESCE(SUM(amount), 0) AS total, COUNT(*) AS entries
+       FROM expenses
+      WHERE archived = 0 AND YEAR(date) = ?${filter}
+      GROUP BY category, MONTH(date)
+      ORDER BY category`,
+    params,
+  );
+
+  // category -> { months: [12], total, entries }
+  const byCategory = new Map();
+  const monthTotals = Array(12).fill(0);
+
+  for (const r of rows) {
+    const cur = byCategory.get(r.category)
+      || { category: r.category, months: Array(12).fill(0), total: 0, entries: 0 };
+    const idx = Number(r.month) - 1;
+    cur.months[idx] += Number(r.total);
+    cur.total += Number(r.total);
+    cur.entries += Number(r.entries);
+    byCategory.set(r.category, cur);
+    monthTotals[idx] += Number(r.total);
+  }
+
+  const categories = [...byCategory.values()].sort((a, b) => b.total - a.total);
+
+  res.json({
+    year,
+    category,
+    categories,
+    month_totals: monthTotals,
+    total: monthTotals.reduce((a, b) => a + b, 0),
+    // Handy for the chart: one row per month with every category as a key.
+    by_month: monthTotals.map((total, i) => {
+      const row = { month: i + 1, total };
+      categories.forEach((c) => { row[c.category] = c.months[i]; });
+      return row;
+    }),
+  });
+});
+
+/**
+ * GET /api/reports/expense-category?category=&from=&to=
+ * Every entry under one head, for the drill-down from the monthly grid.
+ */
+const expenseByCategory = asyncH(async (req, res) => {
+  const { category } = req.query;
+  if (!category) return res.status(400).json({ error: true, message: 'category দিন' });
+  const from = req.query.from || `${new Date().getFullYear()}-01-01`;
+  const to = req.query.to || today();
+
+  const rows = await query(
+    `SELECT * FROM expenses
+      WHERE archived = 0 AND category = ? AND date BETWEEN ? AND ?
+      ORDER BY date DESC, created_date DESC`,
+    [category, from, to],
+  );
+  res.json({
+    category,
+    from,
+    to,
+    entries: rows,
+    total: rows.reduce((a, r) => a + Number(r.amount), 0),
+  });
+});
+
 /** GET /api/reports/search?q= — the global search screen. */
 const globalSearch = asyncH(async (req, res) => {
   const q = `%${String(req.query.q || '').trim()}%`;
@@ -221,4 +306,7 @@ const globalSearch = asyncH(async (req, res) => {
   res.json({ customers, orders, suppliers });
 });
 
-module.exports = { dashboard, daily, range, dueList, customerStatement, globalSearch };
+module.exports = {
+  dashboard, daily, range, dueList, customerStatement, globalSearch,
+  expenseMonthly, expenseByCategory,
+};

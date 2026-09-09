@@ -26,8 +26,8 @@ export default function Login() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-secondary via-background to-muted p-4">
-      <Card className="w-full max-w-sm p-6">
+    <div className="flex min-h-screen items-center justify-center p-4">
+      <Card className="glass w-full max-w-sm p-6">
         <div className="mb-6 text-center">
           <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-xl bg-primary font-heading text-lg font-bold text-primary-foreground">
             SS

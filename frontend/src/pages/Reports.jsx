@@ -6,12 +6,12 @@ import {
   Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 import { Download, Printer } from 'lucide-react';
-import { Reports as ReportsApi } from '@/api/entities';
+import { Reports as ReportsApi, Suppliers } from '@/api/entities';
 import {
   Button, Card, CardContent, CardHeader, CardTitle, Input, Select, Loading, ErrorState, Tabs,
 } from '@/components/ui';
 import { PageHeader, StatCard, DataTable } from '@/components/shared';
-import { bnDate, downloadCsv, isoDate, money, monthStart } from '@/lib/utils';
+import { BN_MONTH_NAMES, bnDate, downloadCsv, isoDate, money, monthStart, toBnDigits } from '@/lib/utils';
 import { useSettings } from '@/hooks/useSettings';
 
 const CHART_COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))',
@@ -21,9 +21,14 @@ const TABS = [
   { value: 'summary', label: 'সারসংক্ষেপ' },
   { value: 'sales', label: 'বিক্রি' },
   { value: 'expenses', label: 'খরচ' },
+  { value: 'monthly', label: 'মাসিক খরচ' },
   { value: 'due', label: 'বাকি' },
+  { value: 'supplier-due', label: 'ক্রয় বাকি' },
   { value: 'customers', label: 'কাস্টমার' },
 ];
+
+const SHORT_MONTHS = ['জানু', 'ফেব', 'মার্চ', 'এপ্রি', 'মে', 'জুন',
+  'জুলা', 'আগ', 'সেপ্ট', 'অক্টো', 'নভে', 'ডিসে'];
 
 export default function Reports() {
   const navigate = useNavigate();
@@ -47,6 +52,19 @@ export default function Reports() {
     queryKey: ['report-due'],
     queryFn: () => ReportsApi.due(),
     enabled: tab === 'due',
+  });
+
+  const [expenseYear, setExpenseYear] = useState(new Date().getFullYear());
+  const monthlyQuery = useQuery({
+    queryKey: ['expense-monthly', expenseYear],
+    queryFn: () => ReportsApi.expenseMonthly({ year: expenseYear }),
+    enabled: tab === 'monthly',
+  });
+
+  const supplierDueQuery = useQuery({
+    queryKey: ['supplier-due'],
+    queryFn: () => Suppliers.dueList(),
+    enabled: tab === 'supplier-due',
   });
 
   const chartTooltip = {
@@ -270,6 +288,147 @@ export default function Reports() {
                     rows={dueQuery.data || []}
                     onRowClick={(r) => navigate(`/customers/${r.customer_id}`)}
                     empty={<p className="py-4 text-sm text-muted-foreground">কোনো বাকি নেই 🎉</p>}
+                  />
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {tab === 'monthly' && (
+            <Card>
+              <CardHeader className="flex-row flex-wrap items-center justify-between gap-2">
+                <CardTitle>খাতভিত্তিক মাসিক খরচ — {toBnDigits(expenseYear)}</CardTitle>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={expenseYear}
+                    onChange={(e) => setExpenseYear(Number(e.target.value))}
+                    className="h-9 w-32"
+                  >
+                    {Array.from({ length: 7 }, (_, i) => new Date().getFullYear() - 5 + i).map((y) => (
+                      <option key={y} value={y}>{toBnDigits(y)}</option>
+                    ))}
+                  </Select>
+                  {monthlyQuery.data && (
+                    <Button
+                      variant="outline" size="sm"
+                      onClick={() => downloadCsv(
+                        `expenses-monthly-${expenseYear}`,
+                        monthlyQuery.data.categories.map((c) => {
+                          const row = { category: c.category };
+                          BN_MONTH_NAMES.forEach((m, i) => { row[m] = c.months[i]; });
+                          row.total = c.total;
+                          return row;
+                        }),
+                      )}
+                    >
+                      <Download className="h-4 w-4" /> CSV
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {monthlyQuery.isLoading ? <Loading /> : !monthlyQuery.data?.categories.length ? (
+                  <p className="py-6 text-center text-sm text-muted-foreground">
+                    {toBnDigits(expenseYear)} সালে কোনো খরচ নেই
+                  </p>
+                ) : (
+                  <>
+                    <div className="mb-4 h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={monthlyQuery.data.by_month.map((r) => ({
+                            ...r, name: SHORT_MONTHS[r.month - 1],
+                          }))}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                          <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                          <YAxis tick={{ fontSize: 11 }} />
+                          <Tooltip {...chartTooltip} />
+                          <Bar dataKey="total" name="মোট খরচ" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+
+                    <div className="table-wrap">
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            <th className="sticky left-0 bg-white/80">খাত</th>
+                            {SHORT_MONTHS.map((m) => (
+                              <th key={m} className="text-right">{m}</th>
+                            ))}
+                            <th className="text-right">মোট</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {monthlyQuery.data.categories.map((c) => (
+                            <tr key={c.category}>
+                              <td className="sticky left-0 bg-white/80 font-medium">{c.category}</td>
+                              {c.months.map((v, i) => (
+                                <td key={i} className="num text-right">
+                                  {v ? money(v, currency) : <span className="text-muted-foreground">—</span>}
+                                </td>
+                              ))}
+                              <td className="num text-right font-semibold">{money(c.total, currency)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot className="border-t bg-white/60 font-semibold">
+                          <tr>
+                            <td className="sticky left-0 bg-white/80">সর্বমোট</td>
+                            {monthlyQuery.data.month_totals.map((v, i) => (
+                              <td key={i} className="num text-right">{v ? money(v, currency) : '—'}</td>
+                            ))}
+                            <td className="num text-right">{money(monthlyQuery.data.total, currency)}</td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {tab === 'supplier-due' && (
+            <Card>
+              <CardHeader className="flex-row items-center justify-between">
+                <CardTitle>সরবরাহকারীর বাকি</CardTitle>
+                {supplierDueQuery.data && (
+                  <Button
+                    variant="outline" size="sm"
+                    onClick={() => downloadCsv('supplier-due', supplierDueQuery.data)}
+                  >
+                    <Download className="h-4 w-4" /> CSV
+                  </Button>
+                )}
+              </CardHeader>
+              <CardContent>
+                {supplierDueQuery.isLoading ? <Loading /> : (
+                  <DataTable
+                    columns={[
+                      { key: 'name', label: 'সরবরাহকারী', render: (r) => (
+                        <span className="font-medium">{r.name}</span>
+                      ) },
+                      { key: 'mobile', label: 'মোবাইল', render: (r) => r.mobile || '—' },
+                      { key: 'opening_due', label: 'পূর্বের পাওনা', align: 'right', render: (r) => (
+                        <span className="num">{money(r.opening_due, currency)}</span>
+                      ) },
+                      { key: 'billed', label: 'মোট বিল', align: 'right', render: (r) => (
+                        <span className="num">{money(r.billed, currency)}</span>
+                      ) },
+                      { key: 'paid', label: 'পরিশোধ', align: 'right', render: (r) => (
+                        <span className="num text-emerald-700">{money(r.paid, currency)}</span>
+                      ) },
+                      { key: 'due', label: 'বাকি', align: 'right', render: (r) => (
+                        <span className={r.due > 0 ? 'num font-semibold text-destructive' : 'num'}>
+                          {money(r.due, currency)}
+                        </span>
+                      ) },
+                    ]}
+                    rows={supplierDueQuery.data || []}
+                    onRowClick={(r) => navigate(`/suppliers/${r.id}`)}
+                    empty={<p className="py-4 text-sm text-muted-foreground">কোনো সরবরাহকারী নেই</p>}
                   />
                 )}
               </CardContent>
