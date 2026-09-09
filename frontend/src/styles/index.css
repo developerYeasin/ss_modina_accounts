@@ -1,0 +1,122 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Theme tokens — green + amber, matching the SS Modina brand. */
+:root {
+  --background: 44 40% 99%;
+  --foreground: 156 20% 10%;
+  --card: 0 0% 100%;
+  --card-foreground: 156 20% 10%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 156 20% 10%;
+  --primary: 158 64% 20%;
+  --primary-foreground: 44 40% 99%;
+  --secondary: 44 30% 94%;
+  --secondary-foreground: 158 45% 22%;
+  --muted: 44 25% 95%;
+  --muted-foreground: 156 10% 40%;
+  --accent: 36 90% 50%;
+  --accent-foreground: 156 25% 10%;
+  --destructive: 0 72% 50%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 156 15% 88%;
+  --input: 156 15% 88%;
+  --ring: 158 64% 24%;
+  --chart-1: 158 64% 30%;
+  --chart-2: 36 90% 50%;
+  --chart-3: 200 65% 42%;
+  --chart-4: 43 78% 58%;
+  --chart-5: 27 82% 56%;
+  --radius: 0.625rem;
+  --font-heading: 'Hind Siliguri', ui-sans-serif, system-ui, sans-serif;
+  --font-body: 'Hind Siliguri', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Tiro Bangla', 'Hind Siliguri', ui-sans-serif, system-ui, sans-serif;
+  --sidebar-background: 44 38% 97%;
+  --sidebar-foreground: 156 22% 16%;
+  --sidebar-primary: 158 64% 20%;
+  --sidebar-primary-foreground: 44 40% 99%;
+  --sidebar-accent: 36 90% 90%;
+  --sidebar-accent-foreground: 158 64% 18%;
+  --sidebar-border: 156 15% 90%;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  /* The page ground is a fixed 5-stop diagonal wash (mint → cream → amber),
+     not a flat fill — the glass surfaces above it read against this. */
+  body {
+    @apply text-foreground font-body antialiased;
+    background: linear-gradient(135deg, #f0fdf4, #fefce8, #ecfdf5, #fef3c7, #f0fdf4);
+    background-attachment: fixed;
+    -webkit-tap-highlight-color: transparent;
+  }
+  h1, h2, h3, h4 {
+    @apply font-heading;
+  }
+  /* Bengali numerals render better with a touch more tracking. */
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  /* ---- Glass surfaces ----
+     Frosted translucent panels layered over the gradient ground. */
+  .glass {
+    background: #ffffff8c;
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    border: 1px solid rgb(255 255 255 / 0.6);
+    box-shadow: 0 8px 32px #0f172a0f, inset 0 1px #ffffff80;
+  }
+  .glass-card {
+    background: #ffffff99;
+    backdrop-filter: blur(14px) saturate(160%);
+    -webkit-backdrop-filter: blur(14px) saturate(160%);
+    border: 1px solid rgb(255 255 255 / 0.55);
+    box-shadow: 0 6px 24px #0f172a0f, inset 0 1px #ffffff73;
+    transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.35s ease;
+  }
+  .glass-nav {
+    background: #ffffffb8;
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+  }
+  /* Active nav item: a tinted green→amber wash instead of a solid fill. */
+  .glass-active {
+    background: linear-gradient(135deg, #10b98126, #f59e0b1a);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgb(16 185 129 / 0.2);
+    box-shadow: 0 0 16px #10b98133, inset 0 1px #ffffff66;
+  }
+
+  .table-wrap {
+    @apply glass-card w-full overflow-x-auto rounded-xl;
+  }
+  .data-table {
+    @apply w-full text-sm;
+  }
+  .data-table thead th {
+    @apply whitespace-nowrap px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground;
+    background: #ffffff73;
+  }
+  .data-table tbody td {
+    @apply px-3 py-2.5 align-middle;
+    border-top: 1px solid rgb(255 255 255 / 0.55);
+  }
+  .data-table tbody tr:hover {
+    background: #ffffff80;
+  }
+}
+
+/* Print: invoices and statements only. */
+@media print {
+  .no-print { display: none !important; }
+  body { background: #fff; }
+  .print-area { box-shadow: none !important; border: 0 !important; }
+  @page { margin: 12mm; }
+}
