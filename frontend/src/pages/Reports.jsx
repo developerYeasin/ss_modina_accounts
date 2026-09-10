@@ -10,7 +10,9 @@ import { Reports as ReportsApi, Suppliers } from '@/api/entities';
 import {
   Button, Card, CardContent, CardHeader, CardTitle, Input, Select, Loading, ErrorState, Tabs,
 } from '@/components/ui';
-import { PageHeader, StatCard, DataTable } from '@/components/shared';
+import {
+  PageHeader, StatCard, DataTable, PrintDoc, PrintTable, PrintTotals,
+} from '@/components/shared';
 import { BN_MONTH_NAMES, bnDate, downloadCsv, isoDate, money, monthStart, toBnDigits } from '@/lib/utils';
 import { useSettings } from '@/hooks/useSettings';
 
@@ -74,6 +76,7 @@ export default function Reports() {
 
   return (
     <div>
+      <div className="no-print">
       <PageHeader
         title="রিপোর্ট"
         subtitle={`${bnDate(range.from)} — ${bnDate(range.to)}`}
@@ -83,6 +86,7 @@ export default function Reports() {
           </Button>
         }
       />
+      </div>
 
       <Card className="mb-4 no-print">
         <CardContent className="grid gap-3 pt-4 sm:grid-cols-3">
@@ -117,13 +121,18 @@ export default function Reports() {
 
       {isLoading ? <Loading /> : error ? <ErrorState error={error} onRetry={refetch} /> : (
         <>
-          <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="print-only">
+            <RangeSheet data={data} range={range} currency={currency} />
+          </div>
+
+          <div className="no-print mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
             <StatCard label="মোট বিক্রি" value={data.summary.sales} currency={currency} tone="primary" />
             <StatCard label="আদায়" value={data.summary.collected} currency={currency} tone="success" />
             <StatCard label="খরচ" value={data.summary.expenses} currency={currency} tone="danger" />
-            <StatCard label="লাভ" value={data.summary.profit} currency={currency} tone="accent" />
+            <StatCard label="বাকি" value={data.summary.due} currency={currency} tone="accent" />
           </div>
 
+          <div className="no-print">
           {tab === 'summary' && (
             <div className="grid gap-4 lg:grid-cols-2">
               <Card>
@@ -170,8 +179,7 @@ export default function Reports() {
                   <div className="grid gap-x-8 gap-y-1 text-sm sm:grid-cols-2">
                     <Row label="মোট অর্ডার" value={`${data.summary.orders} টি`} />
                     <Row label="মোট বিক্রয়" value={money(data.summary.sales, currency)} />
-                    <Row label="মোট ক্রয়মূল্য" value={money(data.summary.cost, currency)} />
-                    <Row label="আনুমানিক লাভ" value={money(data.summary.profit, currency)} />
+                    <Row label="অর্ডারের অতিরিক্ত খরচ" value={money(data.summary.cost, currency)} />
                     <Row label="আদায়কৃত" value={money(data.summary.collected, currency)} />
                     <Row label="মোট খরচ" value={money(data.summary.expenses, currency)} />
                     <Row label="বাকি" value={money(data.summary.due, currency)} />
@@ -469,6 +477,7 @@ export default function Reports() {
               </CardContent>
             </Card>
           )}
+          </div>
         </>
       )}
     </div>
@@ -481,3 +490,83 @@ const Row = ({ label, value }) => (
     <span className="num font-medium">{value}</span>
   </div>
 );
+
+/**
+ * সময়ভিত্তিক হিসাব — the range report as one printed page: how much was sold,
+ * collected and spent between two dates, then where the money went by খাত and
+ * by কাজের ধরন.
+ */
+function RangeSheet({ data, range, currency }) {
+  const { summary } = data;
+  return (
+    <PrintDoc
+      title="সময়ভিত্তিক হিসাব"
+      copyLabel="মালিক কপি"
+      meta={[['সময়', `${bnDate(range.from)} — ${bnDate(range.to)}`]]}
+      signatures={['হিসাবরক্ষক', 'মালিকের স্বাক্ষর']}
+      footerNote=""
+    >
+      <PrintTable
+        head={[{ label: 'খাত' }, { label: 'টাকা', align: 'right', width: '150px' }]}
+      >
+        <tr><td>মোট অর্ডার</td>
+          <td className="num" style={{ textAlign: 'right' }}>{toBnDigits(summary.orders)} টি</td></tr>
+        <tr><td>মোট বিক্রয়</td>
+          <td className="num" style={{ textAlign: 'right' }}>{money(summary.sales, currency)}</td></tr>
+        <tr><td>আদায়কৃত</td>
+          <td className="num" style={{ textAlign: 'right' }}>{money(summary.collected, currency)}</td></tr>
+        <tr><td>মোট খরচ</td>
+          <td className="num" style={{ textAlign: 'right' }}>− {money(summary.expenses, currency)}</td></tr>
+        <tr><td>অর্ডারের অতিরিক্ত খরচ</td>
+          <td className="num" style={{ textAlign: 'right' }}>{money(summary.cost, currency)}</td></tr>
+        <tr><td>বাকি</td>
+          <td className="num" style={{ textAlign: 'right' }}>{money(summary.due, currency)}</td></tr>
+      </PrintTable>
+
+      <PrintTotals
+        rows={[
+          { label: 'আদায়', value: money(summary.collected, currency) },
+          { label: 'খরচ', value: money(summary.expenses, currency) },
+          { label: 'নিট নগদ', value: money(summary.net, currency), strong: true },
+        ]}
+      />
+
+      {data.by_type?.length > 0 && (
+        <div className="print-subsection">
+          <p className="print-party-label">ধরনভিত্তিক বিক্রি</p>
+          <PrintTable
+            head={[
+              { label: 'ধরন' },
+              { label: 'অর্ডার', align: 'right', width: '90px' },
+              { label: 'টাকা', align: 'right', width: '130px' },
+            ]}
+          >
+            {data.by_type.map((r) => (
+              <tr key={r.order_type}>
+                <td>{r.order_type}</td>
+                <td className="num" style={{ textAlign: 'right' }}>{toBnDigits(r.orders)}</td>
+                <td className="num" style={{ textAlign: 'right' }}>{money(r.total, currency)}</td>
+              </tr>
+            ))}
+          </PrintTable>
+        </div>
+      )}
+
+      {data.expense_breakdown?.length > 0 && (
+        <div className="print-subsection">
+          <p className="print-party-label">খাতভিত্তিক খরচ</p>
+          <PrintTable
+            head={[{ label: 'খাত' }, { label: 'টাকা', align: 'right', width: '130px' }]}
+          >
+            {data.expense_breakdown.map((r) => (
+              <tr key={r.category}>
+                <td>{r.category}</td>
+                <td className="num" style={{ textAlign: 'right' }}>{money(r.total, currency)}</td>
+              </tr>
+            ))}
+          </PrintTable>
+        </div>
+      )}
+    </PrintDoc>
+  );
+}

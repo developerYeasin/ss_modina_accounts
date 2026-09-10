@@ -20,8 +20,19 @@ const parseItems = (items) => {
 };
 
 /**
+ * One line's money. The shop bills either by the piece or by the square foot:
+ * when a sqft figure is written the rate is a per-sqft rate, otherwise the rate
+ * is per piece. Mirrors lineAmount() in the frontend.
+ */
+function lineAmount(it) {
+  const sqft = num(it.sqft ?? it.area);
+  const units = sqft > 0 ? sqft : num(it.quantity);
+  return num(it.selling_price) * units;
+}
+
+/**
  * Order money, computed the same way the order form does it:
- *   gross      = Σ selling_price × quantity
+ *   gross      = Σ line amount (sqft × rate, else pieces × rate)
  *   discount   = fixed amount, or a percent of gross
  *   selling    = gross − discount
  *   cost       = Σ material_cost (+ the explicit cost columns, when given)
@@ -35,7 +46,7 @@ function computeTotals(payload, itemsInput, paidOverride) {
   let gross = 0;
   for (const it of items) {
     materialCost += num(it.material_cost);
-    gross += num(it.selling_price) * num(it.quantity);
+    gross += lineAmount(it);
   }
 
   const extraCost = ['aluminium_cost', 'ss_cost', 'glass_cost', 'accessory_cost',
@@ -261,6 +272,6 @@ async function audit(conn, user, action, recordType, recordId, oldValue, newValu
 }
 
 module.exports = {
-  computeTotals, nextOrderNumber, nextQuoteNumber, nextCustomerCode,
+  computeTotals, lineAmount, nextOrderNumber, nextQuoteNumber, nextCustomerCode,
   createOrder, updateOrder, createPayment, deletePayment, syncOrderPaid, audit,
 };

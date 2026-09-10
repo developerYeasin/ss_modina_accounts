@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Save, LogOut, KeyRound } from 'lucide-react';
 import { Auth } from '@/api/entities';
 import {
-  Button, Card, CardContent, CardHeader, CardTitle, Field, Input, Badge,
+  Button, Card, CardContent, CardHeader, CardTitle, Field, Input, PasswordInput, Badge,
 } from '@/components/ui';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader, InfoRow } from '@/components/shared';
@@ -116,22 +116,22 @@ export default function Profile() {
           <CardContent>
             <form onSubmit={changePassword} className="grid gap-4 sm:grid-cols-3">
               <Field label="বর্তমান পাসওয়ার্ড" required>
-                <Input
-                  type="password" value={pw.current_password}
+                <PasswordInput
+                  autoComplete="current-password" value={pw.current_password}
                   onChange={(e) => setPw({ ...pw, current_password: e.target.value })}
                   required
                 />
               </Field>
               <Field label="নতুন পাসওয়ার্ড" required hint="কমপক্ষে ৬ অক্ষর">
-                <Input
-                  type="password" minLength={6} value={pw.new_password}
+                <PasswordInput
+                  autoComplete="new-password" minLength={6} value={pw.new_password}
                   onChange={(e) => setPw({ ...pw, new_password: e.target.value })}
                   required
                 />
               </Field>
               <Field label="আবার লিখুন" required>
-                <Input
-                  type="password" minLength={6} value={pw.confirm}
+                <PasswordInput
+                  autoComplete="new-password" minLength={6} value={pw.confirm}
                   onChange={(e) => setPw({ ...pw, confirm: e.target.value })}
                   required
                 />

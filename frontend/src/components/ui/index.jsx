@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Loader2, ChevronDown, Check } from 'lucide-react';
+import { X, Loader2, ChevronDown, Check, Eye, EyeOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 /* ------------------------------- Button ------------------------------- */
@@ -78,6 +78,31 @@ export const Input = forwardRef(function Input({ className, ...props }, ref) {
 
 export const Textarea = forwardRef(function Textarea({ className, ...props }, ref) {
   return <textarea ref={ref} className={cn(fieldClass, 'min-h-[80px] py-2', className)} {...props} />;
+});
+
+/** Password field with an eye toggle, so a typo can be checked before submitting. */
+export const PasswordInput = forwardRef(function PasswordInput({ className, ...props }, ref) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div className="relative">
+      <input
+        ref={ref}
+        type={visible ? 'text' : 'password'}
+        className={cn(fieldClass, 'pr-10', className)}
+        {...props}
+      />
+      <button
+        type="button"
+        tabIndex={-1}
+        onClick={() => setVisible((v) => !v)}
+        aria-label={visible ? 'পাসওয়ার্ড লুকান' : 'পাসওয়ার্ড দেখুন'}
+        title={visible ? 'পাসওয়ার্ড লুকান' : 'পাসওয়ার্ড দেখুন'}
+        className="absolute right-0 top-0 flex h-10 w-10 items-center justify-center rounded-r-md text-muted-foreground transition-colors hover:text-foreground"
+      >
+        {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+      </button>
+    </div>
+  );
 });
 
 export const Select = forwardRef(function Select({ className, children, ...props }, ref) {

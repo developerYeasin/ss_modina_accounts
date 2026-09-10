@@ -2,19 +2,23 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Trash2, Save, Calculator } from 'lucide-react';
-import { Customer, Staff, Orders, Order, PriceCatalog } from '@/api/entities';
+import { Customer, Customers, Staff, Orders, Order } from '@/api/entities';
 import {
   Button, Card, CardContent, CardHeader, CardTitle, Field, Input, Select, Textarea,
   Loading, Checkbox,
 } from '@/components/ui';
 import { useToast } from '@/components/ui/toast';
-import { PageHeader, ORDER_TYPES, UNITS, InfoRow } from '@/components/shared';
-import { isoDate, money, num, parseJson } from '@/lib/utils';
+import { PageHeader, ORDER_TYPES, InfoRow } from '@/components/shared';
+import { isoDate, lineAmount, money, num, parseJson } from '@/lib/utils';
 import { useSettings } from '@/hooks/useSettings';
 
+/**
+ * A line is deliberately thin: what it is, how many pieces, how many square
+ * feet (blank when it is sold by the piece), and the rate. Nothing else — the
+ * shop writes memos, not costings.
+ */
 const emptyItem = (category) => ({
-  item_name: '', category, quantity: 1, unit: 'Pcs',
-  width: 0, height: 0, area: 0, material: '', material_cost: 0, selling_price: 0, notes: '',
+  item_name: '', category, quantity: 1, unit: 'Pcs', sqft: 0, selling_price: 0, notes: '',
 });
 
 const blankForm = {
@@ -26,36 +30,28 @@ const blankForm = {
 
 /**
  * Order money, mirroring the backend:
- *   gross = Σ selling_price × quantity, discount fixed or percent,
- *   selling = gross − discount, cost = Σ material_cost + extra costs.
+ *   gross = Σ line amount (বর্গফুট × দর, নয়তো পিস × দর),
+ *   selling = gross − discount, বাকি = selling − advance + পূর্বের বাকি।
  */
-function useTotals(form, items) {
+function useTotals(form, items, previousDue = 0) {
   return useMemo(() => {
-    let materialCost = 0;
-    let gross = 0;
-    items.forEach((it) => {
-      materialCost += num(it.material_cost);
-      gross += num(it.selling_price) * num(it.quantity);
-    });
-    const extra = num(form.transport_cost) + num(form.other_cost);
+    const gross = items.reduce((a, it) => a + lineAmount(it), 0);
     let discount = num(form.discount);
     if (form.discount_type === 'Percent') discount = gross * (discount / 100);
     const totalSelling = gross - discount;
-    const totalCost = materialCost + extra;
-    const profit = totalSelling - totalCost;
     const advance = num(form.advance);
+    const due = totalSelling - advance;
     return {
       gross,
       discountAmount: discount,
-      materialCost,
-      totalCost,
       totalSelling,
-      profit,
-      profitPercent: totalSelling > 0 ? (profit / totalSelling) * 100 : 0,
       advance,
-      due: totalSelling - advance,
+      due,
+      previousDue,
+      // পুরাতন কাস্টমার হলে আগের বাকি এখানেই যোগ হয়ে যায়।
+      finalBalance: due + num(previousDue),
     };
-  }, [form, items]);
+  }, [form, items, previousDue]);
 }
 
 export default function OrderForm() {
@@ -76,10 +72,22 @@ export default function OrderForm() {
   const { data: staff = [] } = useQuery({
     queryKey: ['staff'], queryFn: () => Staff.filter({ active: true }, 'name'),
   });
-  const { data: catalog } = useQuery({ queryKey: ['price-catalog'], queryFn: PriceCatalog.get });
   const { data: existing, isLoading } = useQuery({
     queryKey: ['order', id], queryFn: () => Order.get(id), enabled: isEdit,
   });
+
+  // পুরাতন কাস্টমার: their running balance, so the earlier বাকি carries into
+  // this order on its own. On edit, this order's own due is taken back out.
+  const { data: customerDetail } = useQuery({
+    queryKey: ['customer-detail', form.customer_id],
+    queryFn: () => Customers.detail(form.customer_id),
+    enabled: Boolean(form.customer_id),
+  });
+  const previousDue = (() => {
+    if (!customerDetail) return 0;
+    const balance = num(customerDetail.summary?.due);
+    return Math.max(balance - (isEdit ? num(existing?.due) : 0), 0);
+  })();
 
   // Prefill on edit; on create, reserve the next order number.
   useEffect(() => {
@@ -103,20 +111,10 @@ export default function OrderForm() {
       .catch(() => {});
   }, [isEdit]);
 
-  const totals = useTotals(form, items);
+  const totals = useTotals(form, items, previousDue);
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
   const setItem = (index, key, value) =>
     setItems((list) => list.map((it, i) => (i === index ? { ...it, [key]: value } : it)));
-
-  /** Width × height in feet, kept in sync so area-priced items stay honest. */
-  const setDimension = (index, key, value) => {
-    setItems((list) => list.map((it, i) => {
-      if (i !== index) return it;
-      const next = { ...it, [key]: value };
-      next.area = Math.round(num(next.width) * num(next.height) * 100) / 100;
-      return next;
-    }));
-  };
 
   async function submit(asDraft = false) {
     if (!form.customer_id) {
@@ -145,28 +143,6 @@ export default function OrderForm() {
   }
 
   if (isEdit && isLoading) return <Loading />;
-
-  const materialOptions = (() => {
-    if (!catalog) return [];
-    if (form.order_type === 'Thai Glass') {
-      return catalog.glass.map((g) => ({
-        label: `${g.glass_type} ${g.thickness}`, rate: g.rate,
-      }));
-    }
-    if (form.order_type === 'Aluminium') {
-      return catalog.profile.map((p) => ({ label: p.profile_name, rate: p.price_per_foot }));
-    }
-    if (form.order_type === 'SS') {
-      return catalog.ss.map((s) => ({
-        label: `${s.material_name} ${s.grade || ''}`.trim(), rate: s.price,
-      }));
-    }
-    return [
-      ...catalog.glass.map((g) => ({ label: `${g.glass_type} ${g.thickness}`, rate: g.rate })),
-      ...catalog.profile.map((p) => ({ label: p.profile_name, rate: p.price_per_foot })),
-      ...catalog.ss.map((s) => ({ label: s.material_name, rate: s.price })),
-    ];
-  })();
 
   return (
     <div>
@@ -273,77 +249,40 @@ export default function OrderForm() {
                     )}
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    <Field label="নাম" className="sm:col-span-2">
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                    <Field label="আইটেমের নাম" className="sm:col-span-2">
                       <Input
                         value={it.item_name}
-                        placeholder="যেমন: জানালা"
+                        placeholder="যেমন: এস এস গেট"
                         onChange={(e) => setItem(i, 'item_name', e.target.value)}
                       />
                     </Field>
 
-                    <Field label="ম্যাটেরিয়াল">
-                      <Select
-                        value={it.material}
-                        onChange={(e) => {
-                          const opt = materialOptions.find((m) => m.label === e.target.value);
-                          setItem(i, 'material', e.target.value);
-                          if (opt?.rate) setItem(i, 'selling_price', opt.rate);
-                        }}
-                      >
-                        <option value="">নির্বাচন করুন</option>
-                        {materialOptions.map((m) => <option key={m.label} value={m.label}>{m.label}</option>)}
-                      </Select>
-                    </Field>
-
-                    <Field label="একক">
-                      <Select value={it.unit} onChange={(e) => setItem(i, 'unit', e.target.value)}>
-                        {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-                      </Select>
-                    </Field>
-
-                    <Field label="প্রস্থ (ফুট)">
-                      <Input
-                        type="number" step="0.01" min="0" value={it.width}
-                        onChange={(e) => setDimension(i, 'width', e.target.value)}
-                      />
-                    </Field>
-                    <Field label="উচ্চতা (ফুট)">
-                      <Input
-                        type="number" step="0.01" min="0" value={it.height}
-                        onChange={(e) => setDimension(i, 'height', e.target.value)}
-                      />
-                    </Field>
-                    <Field label="ক্ষেত্রফল (বর্গফুট)">
-                      <Input value={it.area} readOnly className="bg-muted" />
-                    </Field>
-                    <Field label="পরিমাণ">
+                    <Field label="পরিমাণ (পিস)">
                       <Input
                         type="number" step="0.01" min="0" value={it.quantity}
                         onChange={(e) => setItem(i, 'quantity', e.target.value)}
                       />
                     </Field>
 
-                    <Field label="ক্রয়মূল্য (মোট)">
+                    <Field label="বর্গফুট" hint="মোট বর্গফুট। দিলে দর × বর্গফুট ধরা হয়; পিসে বিক্রি হলে ০ রাখুন">
                       <Input
-                        type="number" step="0.01" min="0" value={it.material_cost}
-                        onChange={(e) => setItem(i, 'material_cost', e.target.value)}
+                        type="number" step="0.01" min="0" value={it.sqft ?? 0}
+                        onChange={(e) => setItem(i, 'sqft', e.target.value)}
                       />
                     </Field>
-                    <Field label="বিক্রয় দর (প্রতি একক)">
+
+                    <Field label="দর (প্রতি একক)">
                       <Input
                         type="number" step="0.01" min="0" value={it.selling_price}
                         onChange={(e) => setItem(i, 'selling_price', e.target.value)}
                       />
                     </Field>
-                    <Field label="সাব-টোটাল">
-                      <Input
-                        readOnly
-                        className="bg-muted num"
-                        value={money(num(it.selling_price) * num(it.quantity), currency)}
-                      />
-                    </Field>
                   </div>
+
+                  <p className="mt-2 text-right text-sm font-semibold">
+                    টাকা: <span className="num">{money(lineAmount(it), currency)}</span>
+                  </p>
                 </div>
               ))}
             </CardContent>
@@ -404,19 +343,18 @@ export default function OrderForm() {
                 <InfoRow label="মোট (ছাড়ের আগে)" value={money(totals.gross, currency)} />
                 <InfoRow label="ছাড়" value={`− ${money(totals.discountAmount, currency)}`} />
                 <InfoRow label="মোট বিক্রয়" value={<span className="text-base font-bold">{money(totals.totalSelling, currency)}</span>} />
-                <InfoRow label="মোট খরচ" value={money(totals.totalCost, currency)} />
+                <InfoRow label="অগ্রিম / জমা" value={money(totals.advance, currency)} />
+                <InfoRow label="এই অর্ডারের বাকি" value={money(totals.due, currency)} />
+                {totals.previousDue > 0 && (
+                  <InfoRow label="পূর্বের বাকি" value={money(totals.previousDue, currency)} />
+                )}
                 <InfoRow
-                  label="আনুমানিক লাভ"
+                  label={totals.previousDue > 0 ? 'সর্বমোট বাকি' : 'বাকি'}
                   value={
-                    <span className={totals.profit >= 0 ? 'text-emerald-700' : 'text-destructive'}>
-                      {money(totals.profit, currency)} ({totals.profitPercent.toFixed(1)}%)
+                    <span className="text-base font-bold text-destructive">
+                      {money(totals.finalBalance, currency)}
                     </span>
                   }
-                />
-                <InfoRow label="অগ্রিম" value={money(totals.advance, currency)} />
-                <InfoRow
-                  label="বাকি"
-                  value={<span className="text-base font-bold text-destructive">{money(totals.due, currency)}</span>}
                 />
               </div>
 

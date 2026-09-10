@@ -7,13 +7,13 @@ import {
   Button, Card, CardContent, CardHeader, CardTitle, Field, Input, Select, Textarea,
 } from '@/components/ui';
 import { useToast } from '@/components/ui/toast';
-import { PageHeader, ORDER_TYPES, UNITS, InfoRow } from '@/components/shared';
-import { isoDate, money, num } from '@/lib/utils';
+import { PageHeader, InfoRow } from '@/components/shared';
+import { isoDate, lineAmount, money, num } from '@/lib/utils';
 import { useSettings } from '@/hooks/useSettings';
 
 const emptyItem = () => ({
   item_name: '', category: 'Thai Glass', quantity: 1, unit: 'Pcs',
-  width: 0, height: 0, material: '', selling_price: 0, notes: '',
+  sqft: 0, selling_price: 0, notes: '',
 });
 
 export default function QuotationForm() {
@@ -40,9 +40,7 @@ export default function QuotationForm() {
   }, []);
 
   const totals = useMemo(() => {
-    const subtotal = items.reduce(
-      (a, it) => a + num(it.selling_price) * num(it.quantity), 0,
-    );
+    const subtotal = items.reduce((a, it) => a + lineAmount(it), 0);
     let discount = num(form.discount);
     if (form.discount_type === 'Percent') discount = subtotal * (discount / 100);
     return {
@@ -132,47 +130,31 @@ export default function QuotationForm() {
                       </Button>
                     )}
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    <Field label="নাম" className="sm:col-span-2">
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                    <Field label="আইটেমের নাম" className="sm:col-span-2">
                       <Input value={it.item_name} onChange={(e) => setItem(i, 'item_name', e.target.value)} />
                     </Field>
-                    <Field label="ক্যাটাগরি">
-                      <Select value={it.category} onChange={(e) => setItem(i, 'category', e.target.value)}>
-                        {ORDER_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                      </Select>
-                    </Field>
-                    <Field label="একক">
-                      <Select value={it.unit} onChange={(e) => setItem(i, 'unit', e.target.value)}>
-                        {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-                      </Select>
-                    </Field>
-                    <Field label="প্রস্থ (ফুট)">
+                    <Field label="পরিমাণ (পিস)">
                       <Input
-                        type="number" step="0.01" value={it.width}
-                        onChange={(e) => setItem(i, 'width', e.target.value)}
-                      />
-                    </Field>
-                    <Field label="উচ্চতা (ফুট)">
-                      <Input
-                        type="number" step="0.01" value={it.height}
-                        onChange={(e) => setItem(i, 'height', e.target.value)}
-                      />
-                    </Field>
-                    <Field label="পরিমাণ">
-                      <Input
-                        type="number" step="0.01" value={it.quantity}
+                        type="number" step="0.01" min="0" value={it.quantity}
                         onChange={(e) => setItem(i, 'quantity', e.target.value)}
                       />
                     </Field>
-                    <Field label="দর">
+                    <Field label="বর্গফুট" hint="মোট বর্গফুট। দিলে দর × বর্গফুট ধরা হয়; পিসে হলে ০ রাখুন">
                       <Input
-                        type="number" step="0.01" value={it.selling_price}
+                        type="number" step="0.01" min="0" value={it.sqft ?? 0}
+                        onChange={(e) => setItem(i, 'sqft', e.target.value)}
+                      />
+                    </Field>
+                    <Field label="দর (প্রতি একক)">
+                      <Input
+                        type="number" step="0.01" min="0" value={it.selling_price}
                         onChange={(e) => setItem(i, 'selling_price', e.target.value)}
                       />
                     </Field>
                   </div>
                   <p className="num mt-2 text-right text-sm font-medium">
-                    {money(num(it.selling_price) * num(it.quantity), currency)}
+                    টাকা: {money(lineAmount(it), currency)}
                   </p>
                 </div>
               ))}

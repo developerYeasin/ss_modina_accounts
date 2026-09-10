@@ -24,17 +24,33 @@ const updateOrder = asyncH(async (req, res) => {
 const orderDetail = asyncH(async (req, res) => {
   const [order] = await query('SELECT * FROM orders WHERE id = ? LIMIT 1', [req.params.id]);
   if (!order) throw notFound('অর্ডার পাওয়া যায়নি');
-  const [payments, customer, setting] = await Promise.all([
+  const [payments, customer, setting, prior] = await Promise.all([
     query('SELECT * FROM payments WHERE order_id = ? AND archived = 0 ORDER BY date, created_date', [order.id]),
     order.customer_id
       ? query('SELECT * FROM customers WHERE id = ? LIMIT 1', [order.customer_id])
       : [],
     query('SELECT * FROM settings LIMIT 1'),
+    // পূর্বের বাকি — what this customer owed before this memo: their opening due,
+    // plus every other open order, less any payment not tied to an order.
+    order.customer_id
+      ? query(
+        `SELECT
+           (SELECT COALESCE(SUM(due),0) FROM orders
+             WHERE customer_id = ? AND archived = 0 AND id <> ?)
+         - (SELECT COALESCE(SUM(amount),0) FROM payments
+             WHERE customer_id = ? AND archived = 0 AND order_id IS NULL)
+           AS prior`,
+        [order.customer_id, order.id, order.customer_id],
+      )
+      : [],
   ]);
+  const previousDue = Number(prior[0]?.prior || 0)
+    + Number(customer[0]?.opening_due || 0);
   res.json({
     order: svc.serialize(getEntity('Order'), order),
     payments,
     customer: customer[0] || null,
+    previous_due: Math.round(previousDue * 100) / 100,
     setting: setting[0] || null,
     items: (() => { try { return JSON.parse(order.items_json || '[]'); } catch { return []; } })(),
   });
@@ -361,9 +377,8 @@ const createQuotation = asyncH(async (req, res) => {
   }
   const items = Array.isArray(data.items) ? data.items
     : (() => { try { return JSON.parse(data.items_json || '[]'); } catch { return []; } })();
-  const subtotal = items.reduce(
-    (a, i) => a + Number(i.selling_price || 0) * Number(i.quantity || 0), 0,
-  );
+  // Same rule as an order line: বর্গফুট থাকলে দর × বর্গফুট, নয়তো দর × পিস।
+  const subtotal = items.reduce((a, i) => a + orders.lineAmount(i), 0);
   let discount = Number(data.discount || 0);
   if (data.discount_type === 'Percent') discount = subtotal * (discount / 100);
   data.items_json = JSON.stringify(items);

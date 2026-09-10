@@ -66,13 +66,24 @@ const dashboard = asyncH(async (req, res) => {
 /** GET /api/reports/daily?date= — the "দৈনিক রিপোর্ট" screen. */
 const daily = asyncH(async (req, res) => {
   const day = req.query.date || today();
-  const [orders, payments, expenses, purchases] = await Promise.all([
+  const [orders, payments, expenses, purchases, carried] = await Promise.all([
     query('SELECT * FROM orders WHERE order_date = ? AND archived = 0 ORDER BY created_date DESC', [day]),
     query('SELECT * FROM payments WHERE date = ? AND archived = 0 ORDER BY created_date DESC', [day]),
     query('SELECT * FROM expenses WHERE date = ? AND archived = 0 ORDER BY created_date DESC', [day]),
     query('SELECT * FROM purchases WHERE date = ? ORDER BY created_date DESC', [day]),
+    // গতকালের ক্যাশ: every earlier day's collection minus its expenses, so the
+    // cash left in the drawer yesterday opens today's sheet automatically.
+    query(
+      `SELECT
+         (SELECT COALESCE(SUM(amount),0) FROM payments WHERE archived = 0 AND date < ?)
+       - (SELECT COALESCE(SUM(amount),0) FROM expenses WHERE archived = 0 AND date < ?)
+         AS opening`,
+      [day, day],
+    ),
   ]);
   const sum = (rows, key) => rows.reduce((a, r) => a + Number(r[key] || 0), 0);
+  const openingCash = Number(carried[0]?.opening || 0);
+  const netCash = sum(payments, 'amount') - sum(expenses, 'amount');
   res.json({
     date: day,
     orders, payments, expenses, purchases,
@@ -81,7 +92,9 @@ const daily = asyncH(async (req, res) => {
       collected: sum(payments, 'amount'),
       expenses: sum(expenses, 'amount'),
       purchases: sum(purchases, 'total_cost'),
-      net_cash: sum(payments, 'amount') - sum(expenses, 'amount'),
+      opening_cash: openingCash,
+      net_cash: netCash,
+      closing_cash: openingCash + netCash,
       new_due: sum(orders, 'due'),
     },
   });

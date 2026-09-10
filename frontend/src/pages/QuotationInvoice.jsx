@@ -3,13 +3,13 @@ import { useQuery } from '@tanstack/react-query';
 import { Printer } from 'lucide-react';
 import { Quotation } from '@/api/entities';
 import { Button, Loading, ErrorState } from '@/components/ui';
-import { PageHeader } from '@/components/shared';
-import { bnDate, money, num, parseJson } from '@/lib/utils';
+import { PageHeader, PrintDoc, PrintTable, PrintTotals } from '@/components/shared';
+import { bnDate, lineAmount, money, num, parseJson, qty } from '@/lib/utils';
 import { useSettings } from '@/hooks/useSettings';
 
 export default function QuotationInvoice() {
   const { id } = useParams();
-  const { setting, currency } = useSettings();
+  const { currency } = useSettings();
   const { data: quote, isLoading, error, refetch } = useQuery({
     queryKey: ['quotation', id], queryFn: () => Quotation.get(id),
   });
@@ -34,103 +34,70 @@ export default function QuotationInvoice() {
         />
       </div>
 
-      <div className="print-area mx-auto max-w-3xl rounded-lg border bg-white p-6 shadow-sm sm:p-8">
-        <div className="flex flex-wrap items-start justify-between gap-4 border-b pb-4">
-          <div className="flex items-start gap-3">
-            {setting?.logo_url && (
-              <img src={setting.logo_url} alt="logo" className="h-16 w-16 object-contain" />
-            )}
-            <div>
-              <h2 className="font-display text-xl font-bold">{setting?.business_name}</h2>
-              <p className="text-sm text-muted-foreground">{setting?.address}</p>
-              <p className="text-sm text-muted-foreground">{setting?.phone}</p>
-            </div>
-          </div>
-          <div className="text-right">
-            <p className="font-heading text-lg font-bold">কোটেশন</p>
-            <p className="text-sm">নং: <span className="font-medium">{quote.quote_number}</span></p>
-            <p className="text-sm">তারিখ: {bnDate(quote.date)}</p>
-            {quote.valid_until && <p className="text-sm">মেয়াদ: {bnDate(quote.valid_until)}</p>}
-          </div>
-        </div>
-
-        <div className="grid gap-2 border-b py-4 text-sm sm:grid-cols-2">
+      <PrintDoc
+        title="কোটেশন / দর প্রস্তাব"
+        copyLabel="কাস্টমার কপি"
+        meta={[
+          ['নং', quote.quote_number],
+          ['তারিখ', bnDate(quote.date || quote.created_date)],
+          quote.valid_until && ['মেয়াদ', bnDate(quote.valid_until)],
+        ]}
+        signatures={['কাস্টমারের স্বাক্ষর', 'অনুমোদিত স্বাক্ষর']}
+      >
+        <section className="print-parties">
           <div>
-            <p className="text-muted-foreground">গ্রাহকের নাম</p>
-            <p className="font-medium">{quote.customer_name || '—'}</p>
+            <p className="print-party-label">কাস্টমারের তথ্য</p>
+            <p className="print-party-name">{quote.customer_name || '—'}</p>
+            <p>মোবাইল: {quote.customer_mobile || '—'}</p>
           </div>
-          <div className="sm:text-right">
-            <p className="text-muted-foreground">মোবাইল</p>
-            <p className="font-medium">{quote.customer_mobile || '—'}</p>
+          <div>
+            <p className="print-party-label">কাজের বিবরণ</p>
+            <p>{quote.description || quote.order_type || '—'}</p>
           </div>
-        </div>
+        </section>
 
-        <div className="overflow-x-auto py-4">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b bg-muted/50">
-                <th className="px-2 py-2 text-left">#</th>
-                <th className="px-2 py-2 text-left">বিবরণ</th>
-                <th className="px-2 py-2 text-left">মাপ</th>
-                <th className="px-2 py-2 text-right">পরিমাণ</th>
-                <th className="px-2 py-2 text-right">দর</th>
-                <th className="px-2 py-2 text-right">টাকা</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((it, i) => (
-                <tr key={i} className="border-b">
-                  <td className="px-2 py-2">{i + 1}</td>
-                  <td className="px-2 py-2">
-                    <p className="font-medium">{it.item_name || it.category}</p>
-                    {it.material && <p className="text-xs text-muted-foreground">{it.material}</p>}
-                  </td>
-                  <td className="px-2 py-2">
-                    {num(it.width) && num(it.height) ? `${it.width}′ × ${it.height}′` : '—'}
-                  </td>
-                  <td className="num px-2 py-2 text-right">{it.quantity} {it.unit}</td>
-                  <td className="num px-2 py-2 text-right">{money(it.selling_price, currency)}</td>
-                  <td className="num px-2 py-2 text-right font-medium">
-                    {money(num(it.selling_price) * num(it.quantity), currency)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <PrintTable
+          head={[
+            { label: 'ক্র.', width: '36px', align: 'center' },
+            { label: 'বিবরণ' },
+            { label: 'পিস', align: 'right', width: '64px' },
+            { label: 'বর্গফুট', align: 'right', width: '78px' },
+            { label: 'দর', align: 'right', width: '90px' },
+            { label: 'টাকা', align: 'right', width: '110px' },
+          ]}
+        >
+          {items.map((it, i) => (
+            <tr key={i}>
+              <td className="num" style={{ textAlign: 'center' }}>{i + 1}</td>
+              <td>{it.item_name || it.category}</td>
+              <td className="num" style={{ textAlign: 'right' }}>{qty(it.quantity)}</td>
+              <td className="num" style={{ textAlign: 'right' }}>
+                {num(it.sqft ?? it.area) > 0 ? qty(it.sqft ?? it.area) : '—'}
+              </td>
+              <td className="num" style={{ textAlign: 'right' }}>{money(it.selling_price, currency)}</td>
+              <td className="num" style={{ textAlign: 'right', fontWeight: 600 }}>
+                {money(lineAmount(it), currency)}
+              </td>
+            </tr>
+          ))}
+        </PrintTable>
 
-        <div className="flex justify-end border-t pt-4">
-          <dl className="w-full max-w-xs space-y-1.5 text-sm">
-            <div className="flex justify-between">
-              <dt>সাব-টোটাল</dt><dd className="num">{money(quote.subtotal, currency)}</dd>
-            </div>
-            {num(quote.discount) > 0 && (
-              <div className="flex justify-between">
-                <dt>ছাড়</dt><dd className="num">− {money(quote.discount, currency)}</dd>
-              </div>
-            )}
-            {num(quote.other_cost) > 0 && (
-              <div className="flex justify-between">
-                <dt>অন্যান্য</dt><dd className="num">{money(quote.other_cost, currency)}</dd>
-              </div>
-            )}
-            <div className="flex justify-between border-t pt-1.5 text-base font-bold">
-              <dt>সর্বমোট</dt><dd className="num">{money(quote.total, currency)}</dd>
-            </div>
-          </dl>
-        </div>
+        <PrintTotals
+          rows={[
+            { label: 'সাব-টোটাল', value: money(quote.subtotal, currency) },
+            num(quote.discount) > 0 && { label: 'ছাড়', value: `− ${money(quote.discount, currency)}` },
+            num(quote.other_cost) > 0 && { label: 'অন্যান্য', value: money(quote.other_cost, currency) },
+            { label: 'সর্বমোট', value: money(quote.total, currency), strong: true },
+          ]}
+        />
 
         {quote.notes && (
-          <div className="mt-4 border-t pt-3 text-sm">
-            <p className="font-semibold">নোট</p>
-            <p className="text-muted-foreground">{quote.notes}</p>
+          <div className="print-subsection">
+            <p className="print-party-label">নোট</p>
+            <p>{quote.notes}</p>
           </div>
         )}
-
-        {setting?.invoice_footer && (
-          <p className="mt-6 text-center text-xs text-muted-foreground">{setting.invoice_footer}</p>
-        )}
-      </div>
+      </PrintDoc>
     </div>
   );
 }

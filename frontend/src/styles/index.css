@@ -113,9 +113,122 @@
   }
 }
 
+
+/* ---------------------------------------------------------------
+   Printed papers: invoice, statement, salary sheet, daily report.
+   One house style, shared by <PrintDoc>. Screen preview and paper
+   look the same, so what the shop sees is what the shop gets.
+   --------------------------------------------------------------- */
+.print-only { display: none; }
+
+.print-sheet {
+  position: relative;
+  border: 2px solid #14532d;
+  border-radius: 6px;
+  overflow: hidden;
+  color: #111827;
+}
+.print-sheet-inner { position: relative; z-index: 1; padding: 18px 20px 14px; }
+
+.print-watermark {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 62%;
+  max-width: 420px;
+  transform: translate(-50%, -50%);
+  opacity: 0.07;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.print-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 3px double #14532d;
+  padding-bottom: 10px;
+}
+.print-logo { height: 72px; width: 72px; object-fit: contain; }
+.print-shop-name {
+  font-family: var(--font-display), inherit;
+  font-size: 22px; font-weight: 800; line-height: 1.15; color: #14532d;
+  letter-spacing: 0.02em;
+}
+.print-shop-sub { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: #4d7c0f; }
+.print-shop-line { font-size: 11.5px; color: #374151; line-height: 1.5; }
+.print-copy-tag {
+  white-space: nowrap;
+  border: 1px solid #14532d; border-radius: 999px;
+  padding: 2px 12px; font-size: 10px; font-weight: 700;
+  color: #14532d; background: #f0fdf4;
+}
+
+.print-title-band {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 8px 20px;
+  margin-top: 10px; padding: 6px 10px;
+  background: #14532d; color: #fff; border-radius: 4px;
+}
+.print-doc-title { font-size: 15px; font-weight: 700; letter-spacing: 0.04em; }
+.print-meta { display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: 11.5px; }
+.print-meta dt { display: inline; opacity: 0.85; }
+.print-meta dd { display: inline; font-weight: 700; margin-left: 4px; }
+
+.print-body { padding-top: 12px; font-size: 12.5px; }
+
+.print-parties {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  margin-bottom: 12px; font-size: 12px; line-height: 1.6;
+}
+.print-parties > div { border: 1px solid #cbd5e1; border-radius: 4px; padding: 7px 10px; }
+.print-party-label {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: #14532d; margin-bottom: 3px;
+}
+.print-party-name { font-size: 14px; font-weight: 700; }
+.print-subsection { margin-top: 14px; font-size: 12px; line-height: 1.7; }
+
+.print-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.print-table th {
+  background: #14532d; color: #fff;
+  padding: 6px 8px; font-weight: 600; font-size: 11px;
+  letter-spacing: 0.03em; border: 1px solid #14532d;
+}
+.print-table td { padding: 5px 8px; border: 1px solid #cbd5e1; vertical-align: top; }
+.print-table tbody tr:nth-child(even) td { background: #f8fafc; }
+.print-table tfoot td { font-weight: 700; border: 1px solid #cbd5e1; background: #f1f5f9; }
+
+.print-totals { display: flex; justify-content: flex-end; margin-top: 10px; }
+.print-totals dl { width: 100%; max-width: 300px; font-size: 12.5px; }
+.print-totals dl > div {
+  display: flex; justify-content: space-between; gap: 16px;
+  padding: 4px 8px; border-bottom: 1px dotted #94a3b8;
+}
+.print-totals dl > div.strong {
+  font-size: 14px; font-weight: 800; color: #14532d;
+  background: #f0fdf4; border-bottom: 2px solid #14532d;
+}
+.print-totals dl > div.danger { font-weight: 800; color: #b91c1c; background: #fef2f2; }
+
+.print-signatures {
+  display: flex; justify-content: space-between; gap: 32px;
+  margin-top: 42px; font-size: 11px; text-align: center;
+}
+.print-signatures > div { width: 190px; }
+.print-sign-line { border-top: 1px solid #475569; margin-bottom: 4px; }
+
+.print-foot { margin-top: 14px; border-top: 1px solid #cbd5e1; padding-top: 8px; text-align: center; }
+.print-foot-note {
+  font-size: 12px; font-weight: 700; color: #b91c1c;
+  border: 1px solid #fecaca; background: #fef2f2; border-radius: 4px; padding: 5px 8px;
+}
+.print-foot-fine { margin-top: 6px; font-size: 10px; color: #6b7280; }
+
 /* Print: invoices and statements only. */
 @media print {
   .no-print { display: none !important; }
+  .print-only { display: block !important; }
   /* Paper is white — drop the gradient and every frosted surface. */
   body { background: #fff !important; }
   .glass, .glass-card, .glass-nav, .glass-active {
@@ -125,6 +238,17 @@
     box-shadow: none !important;
     border-color: #d1d5db !important;
   }
-  .print-area { box-shadow: none !important; border: 0 !important; }
-  @page { margin: 12mm; }
+  .print-area { box-shadow: none !important; }
+  /* Every printed paper keeps its crest, watermark and rules on paper too. */
+  .print-sheet { border: 2px solid #14532d !important; break-inside: avoid; }
+  .print-watermark { opacity: 0.09 !important; }
+  .print-table thead th, .print-title-band, .print-totals dl > div.strong,
+  .print-totals dl > div.danger, .print-table tbody tr:nth-child(even) td,
+  .print-foot-note, .print-copy-tag {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  .print-table thead { display: table-header-group; }
+  .print-table tr { break-inside: avoid; }
+  @page { margin: 10mm; }
 }

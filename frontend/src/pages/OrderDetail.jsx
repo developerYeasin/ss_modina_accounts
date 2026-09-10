@@ -11,7 +11,7 @@ import { useToast } from '@/components/ui/toast';
 import {
   PageHeader, InfoRow, StatusBadge, DataTable, ORDER_STATUSES, PAYMENT_METHODS,
 } from '@/components/shared';
-import { bnDate, isoDate, money, num } from '@/lib/utils';
+import { bnDate, isoDate, lineAmount, money, num, qty } from '@/lib/utils';
 import { useSettings } from '@/hooks/useSettings';
 
 export default function OrderDetail() {
@@ -83,15 +83,12 @@ export default function OrderDetail() {
               <DataTable
                 columns={[
                   { key: 'item_name', label: 'নাম', render: (it) => it.item_name || '—' },
-                  { key: 'material', label: 'ম্যাটেরিয়াল', render: (it) => it.material || '—' },
-                  { key: 'size', label: 'মাপ', render: (it) =>
-                    num(it.width) && num(it.height) ? `${it.width}′ × ${it.height}′` : '—' },
-                  { key: 'quantity', label: 'পরিমাণ', align: 'right', render: (it) => `${it.quantity} ${it.unit || ''}` },
+                  { key: 'quantity', label: 'পিস', align: 'right', render: (it) => qty(it.quantity) },
+                  { key: 'sqft', label: 'বর্গফুট', align: 'right', render: (it) =>
+                    (num(it.sqft ?? it.area) > 0 ? qty(it.sqft ?? it.area) : '—') },
                   { key: 'selling_price', label: 'দর', align: 'right', render: (it) => money(it.selling_price, currency) },
-                  { key: 'total', label: 'মোট', align: 'right', render: (it) => (
-                    <span className="num font-medium">
-                      {money(num(it.selling_price) * num(it.quantity), currency)}
-                    </span>
+                  { key: 'total', label: 'টাকা', align: 'right', render: (it) => (
+                    <span className="num font-medium">{money(lineAmount(it), currency)}</span>
                   ) },
                 ]}
                 rows={items}
@@ -182,15 +179,6 @@ export default function OrderDetail() {
               <InfoRow label="ডেলিভারি" value={order.expected_delivery ? bnDate(order.expected_delivery) : '—'} />
               <InfoRow label="মোট বিক্রয়" value={<span className="font-bold">{money(order.total_selling, currency)}</span>} />
               <InfoRow label="ছাড়" value={money(order.discount, currency)} />
-              <InfoRow label="মোট খরচ" value={money(order.total_cost, currency)} />
-              <InfoRow
-                label="আনুমানিক লাভ"
-                value={
-                  <span className={order.estimated_profit >= 0 ? 'text-emerald-700' : 'text-destructive'}>
-                    {money(order.estimated_profit, currency)}
-                  </span>
-                }
-              />
               <InfoRow label="আদায়" value={money(order.total_paid, currency)} />
               <InfoRow
                 label="বাকি"

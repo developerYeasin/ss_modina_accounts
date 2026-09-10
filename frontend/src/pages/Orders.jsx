@@ -109,7 +109,7 @@ export default function Orders() {
         <StatCard label="মোট বিক্রি" value={sum(filtered, 'total_selling')} currency={currency} tone="primary" />
         <StatCard label="আদায়" value={sum(filtered, 'total_paid')} currency={currency} tone="success" />
         <StatCard label="বাকি" value={sum(filtered, 'due')} currency={currency} tone="danger" />
-        <StatCard label="আনুমানিক লাভ" value={sum(filtered, 'estimated_profit')} currency={currency} tone="accent" />
+        <StatCard label="অর্ডার সংখ্যা" value={filtered.length} currency={false} tone="accent" />
       </div>
 
       <div className="mb-3 space-y-3">

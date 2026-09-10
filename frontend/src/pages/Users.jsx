@@ -3,8 +3,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, UserCog, Pencil, Trash2 } from 'lucide-react';
 import { Users as UsersApi, Branch } from '@/api/entities';
 import {
-  Button, Loading, ErrorState, Dialog, Field, Input, Select, ConfirmDialog,
-  Badge, Checkbox,
+  Button, Loading, ErrorState, Dialog, Field, Input, PasswordInput, Select,
+  ConfirmDialog, Badge, Checkbox,
 } from '@/components/ui';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader, DataTable, StatCard, EmptyState } from '@/components/shared';
@@ -192,8 +192,8 @@ function UserDialog({ user, branches, onClose, onSaved }) {
           required={!isEdit}
           hint={isEdit ? 'খালি রাখলে অপরিবর্তিত থাকবে' : 'কমপক্ষে ৬ অক্ষর'}
         >
-          <Input
-            type="password" value={form.password}
+          <PasswordInput
+            autoComplete="new-password" value={form.password}
             onChange={(e) => set('password', e.target.value)}
           />
         </Field>

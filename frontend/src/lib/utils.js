@@ -18,6 +18,17 @@ export function money(value, currency = '৳') {
   return `${n < 0 ? '-' : ''}${currency} ${formatted}`;
 }
 
+/**
+ * One order line's money. The shop bills by the piece or by the square foot:
+ * when a sqft figure is written the rate is per sqft, otherwise per piece.
+ * Kept in step with lineAmount() in backend/src/services/orderService.js.
+ */
+export function lineAmount(item) {
+  const sqft = num(item?.sqft ?? item?.area);
+  const units = sqft > 0 ? sqft : num(item?.quantity);
+  return num(item?.selling_price) * units;
+}
+
 export const qty = (value, unit) => {
   const n = num(value);
   const s = Number.isInteger(n) ? String(n) : n.toFixed(2);

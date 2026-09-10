@@ -10,6 +10,7 @@ import {
 import { useToast } from '@/components/ui/toast';
 import {
   PageHeader, InfoRow, DataTable, StatCard, PAYMENT_METHODS,
+  PrintDoc, PrintTable, PrintTotals,
 } from '@/components/shared';
 import { bnDate, downloadCsv, isoDate, money, num } from '@/lib/utils';
 import { useSettings } from '@/hooks/useSettings';
@@ -41,6 +42,7 @@ export default function SupplierDetail() {
 
   return (
     <div>
+      <div className="no-print">
       <PageHeader
         title={supplier.name}
         subtitle={supplier.business || undefined}
@@ -70,15 +72,23 @@ export default function SupplierDetail() {
           </>
         }
       />
+      </div>
 
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {/* সরবরাহকারীর খাতা — the printed page, same letterhead as every other. */}
+      <div className="print-only">
+        <SupplierSheet
+          supplier={supplier} ledger={ledger} summary={summary} currency={currency}
+        />
+      </div>
+
+      <div className="no-print mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard label="পূর্বের পাওনা" value={summary.opening_due} currency={currency} tone="muted" />
         <StatCard label="মোট বিল" value={summary.billed} currency={currency} tone="primary" />
         <StatCard label="মোট পরিশোধ" value={summary.paid} currency={currency} tone="success" />
         <StatCard label="বর্তমান বাকি" value={summary.due} currency={currency} tone="danger" />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="no-print grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-1">
           <CardHeader><CardTitle>তথ্য</CardTitle></CardHeader>
           <CardContent className="divide-y">
@@ -113,7 +123,7 @@ export default function SupplierDetail() {
           />
 
           {tab === 'ledger' && (
-            <Card className="print-area">
+            <Card>
               <CardHeader>
                 <CardTitle>হিসাব খাতা</CardTitle>
                 <p className="text-sm text-muted-foreground">
@@ -350,5 +360,78 @@ function PaymentDialog({ open, onClose, supplier, due, onSaved }) {
         </div>
       </div>
     </Dialog>
+  );
+}
+
+/** One supplier's running account, printed on the shop letterhead. */
+function SupplierSheet({ supplier, ledger, summary, currency }) {
+  return (
+    <PrintDoc
+      title="সরবরাহকারীর হিসাব খাতা"
+      copyLabel="অফিস কপি"
+      meta={[['সরবরাহকারী', supplier.name], ['মোবাইল', supplier.mobile || '—']]}
+      signatures={['সরবরাহকারীর স্বাক্ষর', 'অনুমোদিত স্বাক্ষর']}
+      footerNote=""
+    >
+      <section className="print-parties">
+        <div>
+          <p className="print-party-label">সরবরাহকারীর তথ্য</p>
+          <p className="print-party-name">{supplier.name}</p>
+          {supplier.business && <p>{supplier.business}</p>}
+          <p>মোবাইল: {supplier.mobile || '—'}</p>
+          <p>ঠিকানা: {supplier.address || '—'}</p>
+        </div>
+        <div>
+          <p className="print-party-label">সারসংক্ষেপ</p>
+          <p>পূর্বের পাওনা: <span className="num">{money(summary.opening_due, currency)}</span></p>
+          <p>মোট বিল: <span className="num">{money(summary.billed, currency)}</span></p>
+          <p>মোট পরিশোধ: <span className="num">{money(summary.paid, currency)}</span></p>
+          <p>বর্তমান বাকি: <span className="num font-bold">{money(summary.due, currency)}</span></p>
+        </div>
+      </section>
+
+      <PrintTable
+        head={[
+          { label: 'তারিখ', width: '110px' },
+          { label: 'বিবরণ' },
+          { label: 'বিল', align: 'right', width: '110px' },
+          { label: 'জমা', align: 'right', width: '110px' },
+          { label: 'ব্যালান্স', align: 'right', width: '110px' },
+        ]}
+      >
+        <tr>
+          <td colSpan={4}>পূর্বের পাওনা</td>
+          <td className="num" style={{ textAlign: 'right', fontWeight: 600 }}>
+            {money(summary.opening_due, currency)}
+          </td>
+        </tr>
+        {ledger.map((row, i) => (
+          <tr key={i}>
+            <td style={{ whiteSpace: 'nowrap' }}>{bnDate(row.date)}</td>
+            <td>
+              {row.ref || ENTRY_LABELS[row.type]}
+              {row.description ? ` · ${row.description}` : ''}
+            </td>
+            <td className="num" style={{ textAlign: 'right' }}>
+              {row.debit ? money(row.debit, currency) : '—'}
+            </td>
+            <td className="num" style={{ textAlign: 'right' }}>
+              {row.credit ? money(row.credit, currency) : '—'}
+            </td>
+            <td className="num" style={{ textAlign: 'right', fontWeight: 600 }}>
+              {money(row.balance, currency)}
+            </td>
+          </tr>
+        ))}
+      </PrintTable>
+
+      <PrintTotals
+        rows={[
+          { label: 'মোট বিল', value: money(summary.billed, currency) },
+          { label: 'মোট পরিশোধ', value: money(summary.paid, currency) },
+          { label: 'বর্তমান বাকি', value: money(summary.due, currency), danger: true },
+        ]}
+      />
+    </PrintDoc>
   );
 }

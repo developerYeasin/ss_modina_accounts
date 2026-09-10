@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Save, Plus, Users, Pencil, Trash2, Download, HandCoins } from 'lucide-react';
+import { Save, Plus, Users, Pencil, Trash2, Download, HandCoins, Printer, ArrowLeft } from 'lucide-react';
 import { Salary, Staff } from '@/api/entities';
 import {
   Button, Card, CardContent, CardHeader, CardTitle, Loading, ErrorState, Input,
   Select, Dialog, Field, Checkbox, ConfirmDialog, Tabs, Badge,
 } from '@/components/ui';
 import { useToast } from '@/components/ui/toast';
-import { PageHeader, DataTable, StatCard, EmptyState, PAYMENT_METHODS } from '@/components/shared';
+import {
+  PageHeader, DataTable, StatCard, EmptyState, PAYMENT_METHODS,
+  PrintDoc, PrintTable, PrintTotals,
+} from '@/components/shared';
 import { BN_MONTH_NAMES, bnDate, downloadCsv, isoDate, money, num, toBnDigits } from '@/lib/utils';
 import { useSettings } from '@/hooks/useSettings';
 
@@ -36,6 +39,8 @@ export default function SalaryPage() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [advanceOpen, setAdvanceOpen] = useState(false);
   const [deleteAdvance, setDeleteAdvance] = useState(null);
+  // null | 'sheet' | a staff row — what is on the printer right now.
+  const [printing, setPrinting] = useState(null);
 
   const { data: sheet, isLoading, error, refetch } = useQuery({
     queryKey: ['salary-sheet', year, month],
@@ -86,6 +91,30 @@ export default function SalaryPage() {
     }
   }
 
+  if (printing) {
+    const period = `${BN_MONTH_NAMES[month - 1]} ${toBnDigits(year)}`;
+    return (
+      <div>
+        <div className="no-print mb-3 flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => setPrinting(null)}>
+            <ArrowLeft className="h-4 w-4" /> ফিরে যান
+          </Button>
+          <Button size="sm" onClick={() => window.print()}>
+            <Printer className="h-4 w-4" /> প্রিন্ট
+          </Button>
+        </div>
+        {printing === 'sheet' ? (
+          <SalarySheetPrint
+            period={period} rows={rows} lunchRate={lunchRate} currency={currency}
+            totals={{ base: totalBase, advance: totalAdvance, net: totalNet }}
+          />
+        ) : (
+          <SalarySlip row={printing} period={period} lunchRate={lunchRate} currency={currency} />
+        )}
+      </div>
+    );
+  }
+
   return (
     <div>
       <PageHeader
@@ -101,6 +130,9 @@ export default function SalaryPage() {
                 })))}
               >
                 <Download className="h-4 w-4" /> CSV
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setPrinting('sheet')}>
+                <Printer className="h-4 w-4" /> মাসিক প্রিন্ট
               </Button>
               <Button size="sm" loading={busy} onClick={save}>
                 <Save className="h-4 w-4" /> সংরক্ষণ
@@ -236,7 +268,17 @@ export default function SalaryPage() {
                           </td>
                         ))}
                         <td className="num text-right font-bold">
-                          {money(computeNet(r, lunchRate), currency)}
+                          <span className="inline-flex items-center gap-2">
+                            {money(computeNet(r, lunchRate), currency)}
+                            <button
+                              type="button"
+                              onClick={() => setPrinting(r)}
+                              title="স্যালারি স্লিপ প্রিন্ট"
+                              className="text-muted-foreground hover:text-primary"
+                            >
+                              <Printer className="h-4 w-4" />
+                            </button>
+                          </span>
                         </td>
                       </tr>
                     ))}
@@ -602,5 +644,119 @@ function AdvanceDialog({ open, onClose, staff, year, month, onSaved }) {
         )}
       </div>
     </Dialog>
+  );
+}
+
+/** The month's whole sheet on one page — what the owner signs off on. */
+function SalarySheetPrint({ period, rows, lunchRate, currency, totals }) {
+  return (
+    <PrintDoc
+      title="মাসিক বেতন শিট"
+      copyLabel="অফিস কপি"
+      meta={[['মাস', period], ['কর্মী', toBnDigits(rows.length)]]}
+      signatures={['হিসাবরক্ষক', 'মালিকের স্বাক্ষর']}
+      footerNote="বেতন বুঝে পেলাম — কর্মীর স্বাক্ষর নিয়ে সংরক্ষণ করুন।"
+    >
+      <PrintTable
+        head={[
+          { label: 'ক্র.', width: '34px', align: 'center' },
+          { label: 'কর্মীর নাম' },
+          { label: 'পদ', width: '96px' },
+          { label: 'মূল বেতন', align: 'right', width: '86px' },
+          { label: 'ডিউটি', align: 'right', width: '54px' },
+          { label: 'অনুপ.', align: 'right', width: '54px' },
+          { label: 'লাঞ্চ ভাতা', align: 'right', width: '86px' },
+          { label: 'অগ্রিম', align: 'right', width: '86px' },
+          { label: 'পূর্বের বাকি', align: 'right', width: '86px' },
+          { label: 'নিট প্রদেয়', align: 'right', width: '96px' },
+          { label: 'স্বাক্ষর', width: '90px' },
+        ]}
+        foot={(
+          <tfoot>
+            <tr>
+              <td colSpan={3}>সর্বমোট</td>
+              <td className="num" style={{ textAlign: 'right' }}>{money(totals.base, currency)}</td>
+              <td colSpan={3} />
+              <td className="num" style={{ textAlign: 'right' }}>{money(totals.advance, currency)}</td>
+              <td />
+              <td className="num" style={{ textAlign: 'right' }}>{money(totals.net, currency)}</td>
+              <td />
+            </tr>
+          </tfoot>
+        )}
+      >
+        {rows.map((r, i) => (
+          <tr key={r.staff_id}>
+            <td className="num" style={{ textAlign: 'center' }}>{i + 1}</td>
+            <td style={{ fontWeight: 600 }}>{r.staff_name}</td>
+            <td>{r.position || '—'}</td>
+            <td className="num" style={{ textAlign: 'right' }}>{money(r.base_salary_snapshot, currency)}</td>
+            <td className="num" style={{ textAlign: 'right' }}>{num(r.duty_days)}</td>
+            <td className="num" style={{ textAlign: 'right' }}>{num(r.absent_days)}</td>
+            <td className="num" style={{ textAlign: 'right' }}>
+              {money(num(r.lunch_days) * num(lunchRate), currency)}
+            </td>
+            <td className="num" style={{ textAlign: 'right' }}>{money(r.advance, currency)}</td>
+            <td className="num" style={{ textAlign: 'right' }}>{money(r.previous_due, currency)}</td>
+            <td className="num" style={{ textAlign: 'right', fontWeight: 700 }}>
+              {money(computeNet(r, lunchRate), currency)}
+            </td>
+            <td />
+          </tr>
+        ))}
+      </PrintTable>
+    </PrintDoc>
+  );
+}
+
+/** One কর্মীর স্যালারি স্লিপ — the paper handed over with the money. */
+function SalarySlip({ row, period, lunchRate, currency }) {
+  const lunch = num(row.lunch_days) * num(lunchRate);
+  return (
+    <PrintDoc
+      title="স্যালারি স্লিপ"
+      copyLabel="কর্মী কপি"
+      meta={[['মাস', period], ['কর্মী', row.staff_name]]}
+      signatures={['কর্মীর স্বাক্ষর', 'মালিকের স্বাক্ষর']}
+      footerNote="উপরের টাকা বুঝে পেলাম।"
+    >
+      <section className="print-parties">
+        <div>
+          <p className="print-party-label">কর্মীর তথ্য</p>
+          <p className="print-party-name">{row.staff_name}</p>
+          <p>পদ: {row.position || '—'}</p>
+          <p>মাস: {period}</p>
+        </div>
+        <div>
+          <p className="print-party-label">উপস্থিতি</p>
+          <p>ডিউটি দিন: {num(row.duty_days)}</p>
+          <p>অনুপস্থিত: {num(row.absent_days)}</p>
+          <p>শুক্রবার: {num(row.friday_count)} · লাঞ্চ দিন: {num(row.lunch_days)}</p>
+        </div>
+      </section>
+
+      <PrintTable
+        head={[{ label: 'বিবরণ' }, { label: 'টাকা', align: 'right', width: '140px' }]}
+      >
+        <tr><td>মূল বেতন</td>
+          <td className="num" style={{ textAlign: 'right' }}>{money(row.base_salary_snapshot, currency)}</td></tr>
+        <tr><td>লাঞ্চ ভাতা ({num(row.lunch_days)} দিন × {money(lunchRate, currency)})</td>
+          <td className="num" style={{ textAlign: 'right' }}>{money(lunch, currency)}</td></tr>
+        <tr><td>পূর্বের বাকি</td>
+          <td className="num" style={{ textAlign: 'right' }}>{money(row.previous_due, currency)}</td></tr>
+        <tr><td>অগ্রিম (মাসে নেওয়া)</td>
+          <td className="num" style={{ textAlign: 'right' }}>− {money(row.advance, currency)}</td></tr>
+        <tr><td>মালিকের পাওনা</td>
+          <td className="num" style={{ textAlign: 'right' }}>− {money(row.owner_due, currency)}</td></tr>
+      </PrintTable>
+
+      <PrintTotals
+        rows={[
+          { label: 'মোট প্রাপ্য', value: money(num(row.base_salary_snapshot) + lunch + num(row.previous_due), currency) },
+          { label: 'মোট কর্তন', value: money(num(row.advance) + num(row.owner_due), currency) },
+          { label: 'নিট প্রদেয়', value: money(computeNet(row, lunchRate), currency), strong: true },
+        ]}
+      />
+    </PrintDoc>
   );
 }

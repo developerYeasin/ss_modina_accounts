@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Button, Card, Field, Input } from '@/components/ui';
+import { Button, Card, Field, Input, PasswordInput } from '@/components/ui';
 import { useToast } from '@/components/ui/toast';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -56,8 +56,8 @@ export default function Register() {
             />
           </Field>
           <Field label="পাসওয়ার্ড" required hint="কমপক্ষে ৬ অক্ষর">
-            <Input
-              type="password"
+            <PasswordInput
+              autoComplete="new-password"
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
               required

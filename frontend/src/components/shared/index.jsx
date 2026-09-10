@@ -189,3 +189,4 @@ export const InfoRow = ({ label, value, className }) => (
 
 // Re-exported so pages can pull layout and feedback pieces from one place.
 export { EmptyState, Loading, ErrorState } from '@/components/ui';
+export { PrintDoc, PrintTable, PrintTotals } from './PrintDoc';

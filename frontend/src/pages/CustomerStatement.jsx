@@ -3,13 +3,13 @@ import { useQuery } from '@tanstack/react-query';
 import { Printer, Download } from 'lucide-react';
 import { Customers } from '@/api/entities';
 import { Button, Loading, ErrorState } from '@/components/ui';
-import { PageHeader } from '@/components/shared';
+import { PageHeader, PrintDoc, PrintTable, PrintTotals } from '@/components/shared';
 import { bnDate, money, downloadCsv } from '@/lib/utils';
 import { useSettings } from '@/hooks/useSettings';
 
 export default function CustomerStatement() {
   const { id } = useParams();
-  const { setting, currency } = useSettings();
+  const { currency } = useSettings();
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['customer-statement', id],
     queryFn: () => Customers.statement(id),
@@ -50,73 +50,83 @@ export default function CustomerStatement() {
         />
       </div>
 
-      <div className="print-area mx-auto max-w-4xl rounded-lg border bg-white p-6 shadow-sm">
-        <div className="border-b pb-4 text-center">
-          <h2 className="font-display text-xl font-bold">{setting?.business_name}</h2>
-          <p className="text-sm text-muted-foreground">{setting?.address}</p>
-          <p className="mt-2 font-heading text-lg font-semibold">গ্রাহক স্টেটমেন্ট</p>
-        </div>
-
-        <div className="grid gap-2 border-b py-3 text-sm sm:grid-cols-2">
+      <PrintDoc
+        title="গ্রাহক স্টেটমেন্ট"
+        copyLabel="কাস্টমার কপি"
+        meta={[
+          ['কাস্টমার', customer.name],
+          ['মোবাইল', customer.mobile || '—'],
+        ]}
+        signatures={['কাস্টমারের স্বাক্ষর', 'অনুমোদিত স্বাক্ষর']}
+        footerNote=""
+      >
+        <section className="print-parties">
           <div>
-            <p className="text-muted-foreground">নাম</p>
-            <p className="font-medium">{customer.name}</p>
+            <p className="print-party-label">কাস্টমারের তথ্য</p>
+            <p className="print-party-name">{customer.name}</p>
+            <p>মোবাইল: {customer.mobile || '—'}</p>
+            <p>ঠিকানা: {customer.address || customer.village || '—'}</p>
           </div>
-          <div className="sm:text-right">
-            <p className="text-muted-foreground">মোবাইল</p>
-            <p className="font-medium">{customer.mobile || '—'}</p>
+          <div>
+            <p className="print-party-label">সারসংক্ষেপ</p>
+            <p>মোট বিল: <span className="num">{money(totals.billed, currency)}</span></p>
+            <p>মোট জমা: <span className="num">{money(totals.paid, currency)}</span></p>
+            <p>বর্তমান বাকি: <span className="num font-bold">{money(totals.balance, currency)}</span></p>
           </div>
-        </div>
+        </section>
 
-        <div className="overflow-x-auto py-3">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b bg-muted/50">
-                <th className="px-2 py-2 text-left">তারিখ</th>
-                <th className="px-2 py-2 text-left">রেফ</th>
-                <th className="px-2 py-2 text-left">বিবরণ</th>
-                <th className="px-2 py-2 text-right">বিল</th>
-                <th className="px-2 py-2 text-right">জমা</th>
-                <th className="px-2 py-2 text-right">ব্যালান্স</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-b bg-muted/20">
-                <td className="px-2 py-2" colSpan={5}>পূর্বের বাকি</td>
-                <td className="num px-2 py-2 text-right font-medium">{money(openingDue, currency)}</td>
-              </tr>
-              {ledger.map((row, i) => (
-                <tr key={i} className="border-b">
-                  <td className="px-2 py-2 whitespace-nowrap">{bnDate(row.date)}</td>
-                  <td className="px-2 py-2">{row.ref || '—'}</td>
-                  <td className="px-2 py-2">{row.description || '—'}</td>
-                  <td className="num px-2 py-2 text-right">
-                    {row.debit ? money(row.debit, currency) : '—'}
-                  </td>
-                  <td className="num px-2 py-2 text-right text-emerald-700">
-                    {row.credit ? money(row.credit, currency) : '—'}
-                  </td>
-                  <td className="num px-2 py-2 text-right font-medium">{money(row.balance, currency)}</td>
-                </tr>
-              ))}
-            </tbody>
+        <PrintTable
+          head={[
+            { label: 'তারিখ', width: '110px' },
+            { label: 'রেফ', width: '110px' },
+            { label: 'বিবরণ' },
+            { label: 'বিল', align: 'right', width: '100px' },
+            { label: 'জমা', align: 'right', width: '100px' },
+            { label: 'ব্যালান্স', align: 'right', width: '110px' },
+          ]}
+          foot={(
             <tfoot>
-              <tr className="border-t-2 font-semibold">
-                <td className="px-2 py-2" colSpan={3}>সর্বমোট</td>
-                <td className="num px-2 py-2 text-right">{money(totals.billed, currency)}</td>
-                <td className="num px-2 py-2 text-right">{money(totals.paid, currency)}</td>
-                <td className="num px-2 py-2 text-right text-destructive">
-                  {money(totals.balance, currency)}
-                </td>
+              <tr>
+                <td colSpan={3}>সর্বমোট</td>
+                <td className="num" style={{ textAlign: 'right' }}>{money(totals.billed, currency)}</td>
+                <td className="num" style={{ textAlign: 'right' }}>{money(totals.paid, currency)}</td>
+                <td className="num" style={{ textAlign: 'right' }}>{money(totals.balance, currency)}</td>
               </tr>
             </tfoot>
-          </table>
-        </div>
+          )}
+        >
+          <tr>
+            <td colSpan={5}>পূর্বের বাকি</td>
+            <td className="num" style={{ textAlign: 'right', fontWeight: 600 }}>
+              {money(openingDue, currency)}
+            </td>
+          </tr>
+          {ledger.map((row, i) => (
+            <tr key={i}>
+              <td style={{ whiteSpace: 'nowrap' }}>{bnDate(row.date)}</td>
+              <td className="num">{row.ref || '—'}</td>
+              <td>{row.description || '—'}</td>
+              <td className="num" style={{ textAlign: 'right' }}>
+                {row.debit ? money(row.debit, currency) : '—'}
+              </td>
+              <td className="num" style={{ textAlign: 'right' }}>
+                {row.credit ? money(row.credit, currency) : '—'}
+              </td>
+              <td className="num" style={{ textAlign: 'right', fontWeight: 600 }}>
+                {money(row.balance, currency)}
+              </td>
+            </tr>
+          ))}
+        </PrintTable>
 
-        {setting?.invoice_footer && (
-          <p className="mt-4 text-center text-xs text-muted-foreground">{setting.invoice_footer}</p>
-        )}
-      </div>
+        <PrintTotals
+          rows={[
+            { label: 'মোট বিল', value: money(totals.billed, currency) },
+            { label: 'মোট জমা', value: money(totals.paid, currency) },
+            { label: 'সর্বমোট বাকি', value: money(totals.balance, currency), danger: true },
+          ]}
+        />
+      </PrintDoc>
     </div>
   );
 }
