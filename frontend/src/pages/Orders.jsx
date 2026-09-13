@@ -78,6 +78,7 @@ export default function Orders() {
     <div>
       <PageHeader
         title="অর্ডার"
+        print
         subtitle={`${filtered.length} টি অর্ডার`}
         actions={
           <>

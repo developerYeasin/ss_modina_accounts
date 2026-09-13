@@ -1,17 +1,16 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Printer, Plus, Trash2, Phone } from 'lucide-react';
+import { Pencil, Printer, Plus, Trash2, Phone, ReceiptText } from 'lucide-react';
 import { Orders, Payments } from '@/api/entities';
 import {
-  Button, Card, CardContent, CardHeader, CardTitle, Loading, ErrorState, Select,
-  Dialog, Field, Input, Textarea, ConfirmDialog,
+  Button, Card, CardContent, CardHeader, CardTitle, Loading, ErrorState, Select, ConfirmDialog,
 } from '@/components/ui';
 import { useToast } from '@/components/ui/toast';
 import {
-  PageHeader, InfoRow, StatusBadge, DataTable, ORDER_STATUSES, PAYMENT_METHODS,
+  PageHeader, InfoRow, StatusBadge, DataTable, ORDER_STATUSES, PaymentDialog,
 } from '@/components/shared';
-import { bnDate, isoDate, lineAmount, money, num, qty } from '@/lib/utils';
+import { bnDate, lineAmount, money, num, qty } from '@/lib/utils';
 import { useSettings } from '@/hooks/useSettings';
 
 export default function OrderDetail() {
@@ -21,7 +20,8 @@ export default function OrderDetail() {
   const queryClient = useQueryClient();
   const { currency } = useSettings();
 
-  const [payOpen, setPayOpen] = useState(false);
+  // undefined = closed, null = new payment, row = editing that payment
+  const [paying, setPaying] = useState(undefined);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
   const { data, isLoading, error, refetch } = useQuery({
@@ -32,7 +32,9 @@ export default function OrderDetail() {
   const refreshAll = () => {
     refetch();
     queryClient.invalidateQueries({ queryKey: ['orders'] });
+    queryClient.invalidateQueries({ queryKey: ['payments'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    queryClient.invalidateQueries({ queryKey: ['daily'] });
   };
 
   async function changeStatus(status) {
@@ -99,33 +101,46 @@ export default function OrderDetail() {
 
           <Card>
             <CardHeader className="flex-row items-center justify-between">
-              <CardTitle>পেমেন্ট ({payments.length})</CardTitle>
-              <Button size="sm" onClick={() => setPayOpen(true)}>
-                <Plus className="h-4 w-4" /> পেমেন্ট
+              <CardTitle>জমা / পেমেন্ট ({payments.length})</CardTitle>
+              <Button size="sm" onClick={() => setPaying(null)}>
+                <Plus className="h-4 w-4" /> জমা নিন
               </Button>
             </CardHeader>
             <CardContent>
               <DataTable
                 columns={[
+                  { key: 'no', label: 'কিস্তি', render: (p) => `${payments.indexOf(p) + 1} নং` },
                   { key: 'date', label: 'তারিখ', render: (p) => bnDate(p.date) },
                   { key: 'method', label: 'মাধ্যম' },
                   { key: 'received_by', label: 'গ্রহণকারী', render: (p) => p.received_by || '—' },
-                  { key: 'notes', label: 'নোট', render: (p) => p.notes || '—' },
                   { key: 'amount', label: 'পরিমাণ', align: 'right', render: (p) => (
                     <span className="num font-medium">{money(p.amount, currency)}</span>
                   ) },
                   { key: 'actions', label: '', align: 'right', render: (p) => (
-                    <Button
-                      variant="ghost" size="icon"
-                      onClick={(e) => { e.stopPropagation(); setDeleteTarget(p); }}
-                      aria-label="মুছুন"
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
+                    <span className="flex justify-end gap-1">
+                      <Button
+                        variant="ghost" size="icon" title="জমা রসিদ প্রিন্ট" aria-label="রসিদ"
+                        onClick={(e) => { e.stopPropagation(); navigate(`/payments/${p.id}/receipt`); }}
+                      >
+                        <ReceiptText className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost" size="icon" title="সংশোধন" aria-label="সংশোধন"
+                        onClick={(e) => { e.stopPropagation(); setPaying(p); }}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost" size="icon" aria-label="মুছুন"
+                        onClick={(e) => { e.stopPropagation(); setDeleteTarget(p); }}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </span>
                   ) },
                 ]}
                 rows={payments}
-                empty={<p className="py-4 text-sm text-muted-foreground">এখনো কোনো পেমেন্ট নেই</p>}
+                empty={<p className="py-4 text-sm text-muted-foreground">এখনো কোনো জমা নেই</p>}
               />
             </CardContent>
           </Card>
@@ -190,88 +205,31 @@ export default function OrderDetail() {
       </div>
 
       <PaymentDialog
-        open={payOpen}
-        onClose={() => setPayOpen(false)}
-        order={order}
-        onSaved={() => { setPayOpen(false); refreshAll(); }}
+        open={paying !== undefined}
+        payment={paying}
+        onClose={() => setPaying(undefined)}
+        orderId={order.id}
+        customerId={order.customer_id}
+        due={order.due}
+        onSaved={(saved) => {
+          const wasNew = !paying;
+          setPaying(undefined);
+          refreshAll();
+          if (wasNew && saved?.id) navigate(`/payments/${saved.id}/receipt`);
+        }}
       />
 
       <ConfirmDialog
         open={Boolean(deleteTarget)}
         onClose={() => setDeleteTarget(null)}
-        title="পেমেন্ট মুছবেন?"
-        message={`${money(deleteTarget?.amount, currency)} পেমেন্টটি মুছে ফেলা হবে এবং বাকি পুনরায় হিসাব হবে।`}
+        title="জমা মুছবেন?"
+        message={`${money(deleteTarget?.amount, currency)} জমাটি মুছে ফেলা হবে এবং বাকি পুনরায় হিসাব হবে।`}
         onConfirm={async () => {
           await Payments.delete(deleteTarget.id);
-          toast({ title: 'পেমেন্ট মুছে ফেলা হয়েছে' });
+          toast({ title: 'জমা মুছে ফেলা হয়েছে' });
           refreshAll();
         }}
       />
     </div>
-  );
-}
-
-function PaymentDialog({ open, onClose, order, onSaved }) {
-  const { toast } = useToast();
-  const { currency } = useSettings();
-  const [form, setForm] = useState({
-    date: isoDate(), amount: '', method: 'Cash', reference: '', notes: '',
-  });
-  const [busy, setBusy] = useState(false);
-
-  async function save() {
-    if (!num(form.amount)) {
-      toast({ title: 'পরিমাণ দিন', variant: 'destructive' });
-      return;
-    }
-    setBusy(true);
-    try {
-      await Payments.create({ ...form, order_id: order.id, customer_id: order.customer_id });
-      toast({ title: 'পেমেন্ট যোগ হয়েছে' });
-      setForm({ date: isoDate(), amount: '', method: 'Cash', reference: '', notes: '' });
-      onSaved();
-    } catch (err) {
-      toast({ title: 'সংরক্ষণ করা যায়নি', description: err.message, variant: 'destructive' });
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      title="নতুন পেমেন্ট"
-      description={`বর্তমান বাকি ${money(order.due, currency)}`}
-      footer={
-        <>
-          <Button variant="outline" onClick={onClose}>বাতিল</Button>
-          <Button loading={busy} onClick={save}>সংরক্ষণ</Button>
-        </>
-      }
-    >
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="তারিখ">
-          <Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
-        </Field>
-        <Field label="পরিমাণ" required>
-          <Input
-            type="number" step="0.01" min="0" autoFocus value={form.amount}
-            onChange={(e) => setForm({ ...form, amount: e.target.value })}
-          />
-        </Field>
-        <Field label="মাধ্যম">
-          <Select value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value })}>
-            {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
-          </Select>
-        </Field>
-        <Field label="রেফারেন্স">
-          <Input value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} />
-        </Field>
-        <Field label="নোট" className="sm:col-span-2">
-          <Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
-        </Field>
-      </div>
-    </Dialog>
   );
 }

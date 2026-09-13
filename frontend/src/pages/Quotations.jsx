@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, FileText, Printer, ArrowRightLeft, Trash2 } from 'lucide-react';
+import { Plus, FileText, Printer, ArrowRightLeft, Trash2, Pencil } from 'lucide-react';
 import { Quotation, Quotations as QuotationsApi } from '@/api/entities';
 import {
   Button, Loading, ErrorState, EmptyState, Select, ConfirmDialog,
@@ -45,6 +45,7 @@ export default function Quotations() {
     <div>
       <PageHeader
         title="কোটেশন"
+        print
         subtitle={`${filtered.length} টি কোটেশন`}
         actions={
           <Button size="sm" onClick={() => navigate('/quotations/new')}>
@@ -96,6 +97,13 @@ export default function Quotations() {
                 aria-label="প্রিন্ট"
               >
                 <Printer className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost" size="icon"
+                onClick={(e) => { e.stopPropagation(); navigate(`/quotations/${q.id}/edit`); }}
+                aria-label="সম্পাদনা"
+              >
+                <Pencil className="h-4 w-4" />
               </Button>
               {q.status !== 'Converted' && (
                 <Button

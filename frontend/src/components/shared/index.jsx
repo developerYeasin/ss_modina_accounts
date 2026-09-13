@@ -1,10 +1,11 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Search as SearchIcon } from 'lucide-react';
+import { ArrowLeft, Printer, Search as SearchIcon } from 'lucide-react';
 import { Button, Card, Input, Badge } from '@/components/ui';
 import { cn, money } from '@/lib/utils';
 
-/** Screen header: title, optional back arrow, optional right-hand actions. */
-export function PageHeader({ title, subtitle, back, actions, className }) {
+/** Screen header: title, optional back arrow, optional right-hand actions, optional প্রিন্ট. */
+export function PageHeader({ title, subtitle, back, actions: extra, print, className }) {
+  const actions = print ? <><PrintButton />{extra}</> : extra;
   const navigate = useNavigate();
   return (
     <div className={cn('mb-4 flex flex-wrap items-start justify-between gap-3', className)}>
@@ -25,7 +26,7 @@ export function PageHeader({ title, subtitle, back, actions, className }) {
           {subtitle && <p className="mt-0.5 text-sm text-muted-foreground">{subtitle}</p>}
         </div>
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+      {actions && <div className="no-print flex flex-wrap items-center gap-2">{actions}</div>}
     </div>
   );
 }
@@ -190,3 +191,12 @@ export const InfoRow = ({ label, value, className }) => (
 // Re-exported so pages can pull layout and feedback pieces from one place.
 export { EmptyState, Loading, ErrorState } from '@/components/ui';
 export { PrintDoc, PrintTable, PrintTotals } from './PrintDoc';
+export { StaffSelect } from './StaffSelect';
+export { PaymentDialog } from './PaymentDialog';
+
+/** প্রিন্ট button for list screens — the page itself is the paper. */
+export const PrintButton = ({ label = 'প্রিন্ট' }) => (
+  <Button variant="outline" size="sm" className="no-print" onClick={() => window.print()}>
+    <Printer className="h-4 w-4" /> {label}
+  </Button>
+);

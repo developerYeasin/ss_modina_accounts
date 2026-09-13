@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Trash2, Save } from 'lucide-react';
-import { Customer, Quotations } from '@/api/entities';
+import { Customer, Quotation, Quotations } from '@/api/entities';
 import {
   Button, Card, CardContent, CardHeader, CardTitle, Field, Input, Select, Textarea,
 } from '@/components/ui';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader, InfoRow } from '@/components/shared';
-import { isoDate, lineAmount, money, num } from '@/lib/utils';
+import { isoDate, lineAmount, money, num, parseJson } from '@/lib/utils';
 import { useSettings } from '@/hooks/useSettings';
 
 const emptyItem = () => ({
@@ -17,6 +17,8 @@ const emptyItem = () => ({
 });
 
 export default function QuotationForm() {
+  const { id } = useParams();
+  const isEdit = Boolean(id);
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -33,11 +35,26 @@ export default function QuotationForm() {
     queryKey: ['customers'], queryFn: () => Customer.list('name', 1000),
   });
 
+  const { data: existing } = useQuery({
+    queryKey: ['quotation', id], queryFn: () => Quotation.get(id), enabled: isEdit,
+  });
+
   useEffect(() => {
+    if (existing) {
+      setForm((f) => ({
+        ...f, ...existing, valid_until: existing.valid_until || '', notes: existing.notes || '',
+      }));
+      const parsed = parseJson(existing.items_json, []);
+      setItems(parsed.length ? parsed : [emptyItem()]);
+    }
+  }, [existing]);
+
+  useEffect(() => {
+    if (isEdit) return;
     Quotations.nextNumber()
       .then(({ quote_number }) => setForm((f) => ({ ...f, quote_number })))
       .catch(() => {});
-  }, []);
+  }, [isEdit]);
 
   const totals = useMemo(() => {
     const subtotal = items.reduce((a, it) => a + lineAmount(it), 0);
@@ -61,7 +78,9 @@ export default function QuotationForm() {
     }
     setBusy(true);
     try {
-      const saved = await Quotations.create({ ...form, items });
+      const saved = isEdit
+        ? await Quotations.update(id, { ...form, items })
+        : await Quotations.create({ ...form, items });
       queryClient.invalidateQueries({ queryKey: ['quotations'] });
       toast({ title: 'কোটেশন সংরক্ষিত' });
       navigate(`/quotations/${saved.id}/invoice`);
@@ -74,7 +93,11 @@ export default function QuotationForm() {
 
   return (
     <div>
-      <PageHeader title="নতুন কোটেশন" subtitle={form.quote_number} back="/quotations" />
+      <PageHeader
+        title={isEdit ? 'কোটেশন সম্পাদনা' : 'নতুন কোটেশন'}
+        subtitle={form.quote_number}
+        back="/quotations"
+      />
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">

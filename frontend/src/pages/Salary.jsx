@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Save, Plus, Users, Pencil, Trash2, Download, HandCoins, Printer, ArrowLeft } from 'lucide-react';
-import { Salary, Staff } from '@/api/entities';
+import { Salary, Staff, Expense } from '@/api/entities';
 import {
   Button, Card, CardContent, CardHeader, CardTitle, Loading, ErrorState, Input,
   Select, Dialog, Field, Checkbox, ConfirmDialog, Tabs, Badge,
@@ -15,6 +15,9 @@ import { BN_MONTH_NAMES, bnDate, downloadCsv, isoDate, money, num, toBnDigits } 
 import { useSettings } from '@/hooks/useSettings';
 
 const staffBlank = { name: '', position: '', phone: '', base_salary: '', active: true };
+
+/** Salary handed over is booked as an expense under this head, so it leaves the cash sheet. */
+const SALARY_CATEGORY = 'স্টাফ বেতন';
 
 /** Net = base + lunch allowance − advance − owner due + previous due. */
 const computeNet = (row, lunchRate) =>
@@ -39,6 +42,18 @@ export default function SalaryPage() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [advanceOpen, setAdvanceOpen] = useState(false);
   const [deleteAdvance, setDeleteAdvance] = useState(null);
+  const [editAdvance, setEditAdvance] = useState(null);
+  const [payTarget, setPayTarget] = useState(null);
+
+  // বেতন পরিশোধ যা খরচে বুক হয়েছে — so the sheet shows who is already paid.
+  const period = `${year}-${String(month).padStart(2, '0')}`;
+  const { data: salaryPaid = [], refetch: refetchPaid } = useQuery({
+    queryKey: ['salary-paid', period],
+    queryFn: () => Expense.filter({ category: SALARY_CATEGORY, archived: false }, '-date', 1000),
+    select: (rows) => rows.filter((x) => String(x.notes || '').includes(`[${period}]`)),
+  });
+  const paidFor = (staffName) => salaryPaid
+    .filter((x) => x.person === staffName).reduce((a, x) => a + num(x.amount), 0);
   // null | 'sheet' | a staff row — what is on the printer right now.
   const [printing, setPrinting] = useState(null);
 
@@ -270,6 +285,19 @@ export default function SalaryPage() {
                         <td className="num text-right font-bold">
                           <span className="inline-flex items-center gap-2">
                             {money(computeNet(r, lunchRate), currency)}
+                            {paidFor(r.staff_name) > 0 ? (
+                              <Badge variant="success" title="খরচে বুক হয়েছে">
+                                পরিশোধ {money(paidFor(r.staff_name), currency)}
+                              </Badge>
+                            ) : (
+                              <Button
+                                type="button" size="sm" variant="outline" className="h-7 px-2"
+                                onClick={() => setPayTarget(r)}
+                                disabled={computeNet(r, lunchRate) <= 0}
+                              >
+                                বেতন দিন
+                              </Button>
+                            )}
                             <button
                               type="button"
                               onClick={() => setPrinting(r)}
@@ -354,13 +382,18 @@ export default function SalaryPage() {
                 <span className="num font-semibold text-destructive">{money(a.amount, currency)}</span>
               ) },
               { key: 'actions', label: '', align: 'right', render: (a) => (
-                <Button
-                  variant="ghost" size="icon"
-                  onClick={() => setDeleteAdvance(a)}
-                  aria-label="মুছুন"
-                >
-                  <Trash2 className="h-4 w-4 text-destructive" />
-                </Button>
+                <span className="no-print flex justify-end gap-1">
+                  <Button variant="ghost" size="icon" onClick={() => setEditAdvance(a)} aria-label="সংশোধন">
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost" size="icon"
+                    onClick={() => setDeleteAdvance(a)}
+                    aria-label="মুছুন"
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </span>
               ) },
             ]}
             rows={advances}
@@ -437,12 +470,35 @@ export default function SalaryPage() {
       />
 
       <AdvanceDialog
-        open={advanceOpen}
-        onClose={() => setAdvanceOpen(false)}
+        open={advanceOpen || Boolean(editAdvance)}
+        advance={editAdvance}
+        onClose={() => { setAdvanceOpen(false); setEditAdvance(null); }}
         staff={staff.filter((s) => s.active)}
         year={year}
         month={month}
-        onSaved={() => { setAdvanceOpen(false); refreshAdvances(); }}
+        onSaved={() => { setAdvanceOpen(false); setEditAdvance(null); refreshAdvances(); }}
+      />
+
+      <ConfirmDialog
+        open={Boolean(payTarget)}
+        onClose={() => setPayTarget(null)}
+        title="বেতন পরিশোধ করবেন?"
+        confirmLabel="পরিশোধ করুন"
+        message={payTarget && `${payTarget.staff_name} — ${BN_MONTH_NAMES[month - 1]} মাসের নিট ${money(computeNet(payTarget, lunchRate), currency)}। আজকের তারিখে "${SALARY_CATEGORY}" খরচ হিসেবে বুক হবে এবং দৈনিক হিসাবে হাতে নগদ থেকে বাদ যাবে।`}
+        onConfirm={async () => {
+          await Expense.create({
+            date: isoDate(),
+            category: SALARY_CATEGORY,
+            description: `${payTarget.staff_name} — ${BN_MONTH_NAMES[month - 1]} ${toBnDigits(year)} বেতন`,
+            amount: computeNet(payTarget, lunchRate),
+            method: 'Cash',
+            person: payTarget.staff_name,
+            notes: `[${period}]`,
+          });
+          refetchPaid();
+          ['expenses', 'daily', 'dashboard'].forEach((k) => queryClient.invalidateQueries({ queryKey: [k] }));
+          toast({ title: 'বেতন পরিশোধ বুক হয়েছে', description: 'ভুল হলে খরচ থেকে সম্পাদনা বা মুছতে পারবেন' });
+        }}
       />
 
       <ConfirmDialog
@@ -553,13 +609,25 @@ function StaffDialog({ staff, onClose, onSaved }) {
  * the cash shows up in খরচ and the month's salary drops by the same amount —
  * nothing has to be typed twice.
  */
-function AdvanceDialog({ open, onClose, staff, year, month, onSaved }) {
+function AdvanceDialog({ open, onClose, staff, year, month, onSaved, advance }) {
   const { toast } = useToast();
   const { currency } = useSettings();
   const [form, setForm] = useState({
     staff_id: '', date: isoDate(), amount: '', method: 'Cash', notes: '',
   });
   const [busy, setBusy] = useState(false);
+  const isEdit = Boolean(advance?.id);
+
+  const key = open ? advance?.id || 'new' : null;
+  const [lastKey, setLastKey] = useState(null);
+  if (key !== lastKey) {
+    setLastKey(key);
+    if (open) {
+      setForm(isEdit
+        ? { staff_id: advance.staff_id, date: advance.date, amount: advance.amount, method: advance.method || 'Cash', notes: advance.notes || '' }
+        : { staff_id: '', date: isoDate(), amount: '', method: 'Cash', notes: '' });
+    }
+  }
 
   const selected = staff.find((s) => s.id === form.staff_id);
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
@@ -575,9 +643,13 @@ function AdvanceDialog({ open, onClose, staff, year, month, onSaved }) {
     }
     setBusy(true);
     try {
-      await Salary.addAdvance(form);
-      toast({ title: 'অগ্রিম যোগ হয়েছে', description: 'খরচের খাতায়ও যুক্ত হয়েছে' });
-      setForm({ staff_id: '', date: isoDate(), amount: '', method: 'Cash', notes: '' });
+      if (isEdit) {
+        await Salary.updateAdvance(advance.id, form);
+        toast({ title: 'অগ্রিম সংশোধন হয়েছে', description: 'খরচের খাতায়ও ঠিক করা হয়েছে' });
+      } else {
+        await Salary.addAdvance(form);
+        toast({ title: 'অগ্রিম যোগ হয়েছে', description: 'খরচের খাতায়ও যুক্ত হয়েছে' });
+      }
       onSaved();
     } catch (err) {
       toast({ title: 'সংরক্ষণ করা যায়নি', description: err.message, variant: 'destructive' });
@@ -590,7 +662,7 @@ function AdvanceDialog({ open, onClose, staff, year, month, onSaved }) {
     <Dialog
       open={open}
       onClose={onClose}
-      title="কর্মীকে অগ্রিম"
+      title={isEdit ? 'অগ্রিম সংশোধন' : 'কর্মীকে অগ্রিম'}
       description={`${BN_MONTH_NAMES[month - 1]} ${toBnDigits(year)} — মাসিক বেতন থেকে কাটা পড়বে`}
       footer={
         <>

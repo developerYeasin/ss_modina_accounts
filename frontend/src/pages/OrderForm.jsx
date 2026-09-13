@@ -2,13 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Trash2, Save, Calculator } from 'lucide-react';
-import { Customer, Customers, Staff, Orders, Order } from '@/api/entities';
+import { Customer, Customers, Orders, Order } from '@/api/entities';
 import {
   Button, Card, CardContent, CardHeader, CardTitle, Field, Input, Select, Textarea,
   Loading, Checkbox,
 } from '@/components/ui';
 import { useToast } from '@/components/ui/toast';
-import { PageHeader, ORDER_TYPES, InfoRow } from '@/components/shared';
+import { PageHeader, ORDER_TYPES, InfoRow, StaffSelect } from '@/components/shared';
 import { isoDate, lineAmount, money, num, parseJson } from '@/lib/utils';
 import { useSettings } from '@/hooks/useSettings';
 
@@ -68,9 +68,6 @@ export default function OrderForm() {
 
   const { data: customers = [] } = useQuery({
     queryKey: ['customers'], queryFn: () => Customer.list('name', 1000),
-  });
-  const { data: staff = [] } = useQuery({
-    queryKey: ['staff'], queryFn: () => Staff.filter({ active: true }, 'name'),
   });
   const { data: existing, isLoading } = useQuery({
     queryKey: ['order', id], queryFn: () => Order.get(id), enabled: isEdit,
@@ -209,13 +206,10 @@ export default function OrderForm() {
               </Field>
 
               <Field label="দায়িত্বপ্রাপ্ত কর্মী">
-                <Select
+                <StaffSelect
                   value={form.assigned_staff_id}
-                  onChange={(e) => set('assigned_staff_id', e.target.value)}
-                >
-                  <option value="">নির্বাচন করুন</option>
-                  {staff.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </Select>
+                  onChange={(v) => set('assigned_staff_id', v)}
+                />
               </Field>
 
               <Field label="কাজের বিবরণ" className="sm:col-span-2">
@@ -337,6 +331,16 @@ export default function OrderForm() {
                     onChange={(e) => set('advance', e.target.value)}
                   />
                 </Field>
+                {!isEdit && num(form.advance) > 0 && (
+                  <Field label="টাকা গ্রহণকারী" className="col-span-2">
+                    <StaffSelect
+                      by="name"
+                      value={form.advance_received_by}
+                      onChange={(v) => set('advance_received_by', v)}
+                      placeholder="আমি নিজে (লগইন করা ইউজার)"
+                    />
+                  </Field>
+                )}
               </div>
 
               <div className="divide-y border-t pt-2">

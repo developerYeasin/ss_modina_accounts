@@ -47,6 +47,10 @@ export const Quotation = entityClient('Quotation');
 export const StaffAdvance = entityClient('StaffAdvance');
 export const SupplierPayment = entityClient('SupplierPayment');
 export const AuditLog = entityClient('AuditLog');
+export const OwnerTxn = entityClient('OwnerTxn');
+export const BankAccount = entityClient('BankAccount');
+export const BankTxn = entityClient('BankTxn');
+export const BranchTransfer = entityClient('BranchTransfer');
 
 /** Endpoints that carry business rules, so the UI never recomputes them. */
 export const Auth = {
@@ -74,6 +78,8 @@ export const Orders = {
 
 export const Payments = {
   create: (data) => api.post('/payments', data),
+  update: (id, data) => api.patch(`/payments/${id}`, data),
+  receipt: (id) => api.get(`/payments/${id}/receipt`),
   delete: (id) => api.del(`/payments/${id}`),
 };
 
@@ -84,18 +90,24 @@ export const Customers = {
   statement: (id) => api.get(`/reports/customer/${id}/statement`),
 };
 
-export const Purchases = { create: (data) => api.post('/purchases', data) };
+export const Purchases = {
+  create: (data) => api.post('/purchases', data),
+  update: (id, data) => api.patch(`/purchases/${id}`, data),
+};
 
 export const Suppliers = {
   detail: (id) => api.get(`/suppliers/${id}/detail`),
   dueList: () => api.get('/suppliers/due'),
   addPayment: (id, data) => api.post(`/suppliers/${id}/payments`, data),
+  updatePayment: (paymentId, data) => api.patch(`/entities/SupplierPayment/${paymentId}`, data),
   deletePayment: (id, paymentId) => api.del(`/suppliers/${id}/payments/${paymentId}`),
 };
 
 export const Loans = {
   detail: (id) => api.get(`/loans/${id}/detail`),
   addTxn: (id, data) => api.post(`/loans/${id}/txns`, data),
+  updateTxn: (id, txnId, data) => api.patch(`/loans/${id}/txns/${txnId}`, data),
+  deleteTxn: (id, txnId) => api.del(`/loans/${id}/txns/${txnId}`),
 };
 
 export const Stock = {
@@ -106,6 +118,7 @@ export const Stock = {
 export const Quotations = {
   nextNumber: () => api.get('/quotations/next-number'),
   create: (data) => api.post('/quotations', data),
+  update: (id, data) => api.patch(`/quotations/${id}`, data),
   convert: (id) => api.post(`/quotations/${id}/convert`),
 };
 
@@ -114,6 +127,7 @@ export const Salary = {
   save: (payload) => api.post('/salary/sheet', payload),
   advances: (year, month) => api.get(`/salary/advances${toQuery({ year, month })}`),
   addAdvance: (data) => api.post('/salary/advances', data),
+  updateAdvance: (id, data) => api.patch(`/salary/advances/${id}`, data),
   deleteAdvance: (id) => api.del(`/salary/advances/${id}`),
 };
 

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, ShoppingCart, Download, Trash2 } from 'lucide-react';
+import { Plus, ShoppingCart, Download, Trash2, Pencil } from 'lucide-react';
 import { Purchase, Purchases as PurchasesApi, Supplier } from '@/api/entities';
 import {
   Button, Loading, ErrorState, EmptyState, Select, Input, Dialog, Field,
@@ -21,6 +21,7 @@ export default function Purchases() {
   const [search, setSearch] = useState('');
   const [supplier, setSupplier] = useState('');
   const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
   const { data: purchases = [], isLoading, error, refetch } = useQuery({
@@ -47,6 +48,7 @@ export default function Purchases() {
     <div>
       <PageHeader
         title="ক্রয়"
+        print
         subtitle={`${filtered.length} টি ক্রয়`}
         actions={
           <>
@@ -106,13 +108,22 @@ export default function Purchases() {
             </span>
           ) },
           { key: 'actions', label: '', align: 'right', render: (p) => (
-            <Button
-              variant="ghost" size="icon"
-              onClick={(e) => { e.stopPropagation(); setDeleteTarget(p); }}
-              aria-label="মুছুন"
-            >
-              <Trash2 className="h-4 w-4 text-destructive" />
-            </Button>
+            <span className="no-print flex justify-end gap-1">
+              <Button
+                variant="ghost" size="icon"
+                onClick={(e) => { e.stopPropagation(); setEditing(p); }}
+                aria-label="সম্পাদনা"
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost" size="icon"
+                onClick={(e) => { e.stopPropagation(); setDeleteTarget(p); }}
+                aria-label="মুছুন"
+              >
+                <Trash2 className="h-4 w-4 text-destructive" />
+              </Button>
+            </span>
           ) },
         ]}
         rows={filtered}
@@ -141,11 +152,14 @@ export default function Purchases() {
       />
 
       <PurchaseDialog
-        open={formOpen}
-        onClose={() => setFormOpen(false)}
+        open={formOpen || Boolean(editing)}
+        purchase={editing}
+        onClose={() => { setFormOpen(false); setEditing(null); }}
         suppliers={suppliers}
         onSaved={() => {
           setFormOpen(false);
+          setEditing(null);
+          queryClient.invalidateQueries({ queryKey: ['daily'] });
           queryClient.invalidateQueries({ queryKey: ['purchases'] });
           queryClient.invalidateQueries({ queryKey: ['dashboard'] });
         }}
@@ -166,14 +180,31 @@ export default function Purchases() {
   );
 }
 
-function PurchaseDialog({ open, onClose, suppliers, onSaved }) {
+const blankPurchase = () => ({
+  supplier_id: '', date: isoDate(), material: '', quantity: 0, unit: 'ft',
+  unit_cost: 0, paid: 0, notes: '', branch_id: '',
+});
+
+function PurchaseDialog({ open, onClose, suppliers, onSaved, purchase }) {
   const { toast } = useToast();
   const { currency, branches } = useSettings();
-  const [form, setForm] = useState({
-    supplier_id: '', date: isoDate(), material: '', quantity: 0, unit: 'ft',
-    unit_cost: 0, paid: 0, notes: '', branch_id: '',
-  });
+  const [form, setForm] = useState(blankPurchase);
   const [busy, setBusy] = useState(false);
+  const isEdit = Boolean(purchase?.id);
+
+  // Opening a different purchase (or a new one) re-seeds the form.
+  const key = open ? purchase?.id || 'new' : null;
+  const [lastKey, setLastKey] = useState(null);
+  if (key !== lastKey) {
+    setLastKey(key);
+    if (open) {
+      setForm(isEdit ? {
+        ...blankPurchase(), ...purchase,
+        supplier_id: purchase.supplier_id || '', branch_id: purchase.branch_id || '',
+        notes: purchase.notes || '',
+      } : blankPurchase());
+    }
+  }
 
   const total = num(form.quantity) * num(form.unit_cost);
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
@@ -185,12 +216,9 @@ function PurchaseDialog({ open, onClose, suppliers, onSaved }) {
     }
     setBusy(true);
     try {
-      await PurchasesApi.create(form);
-      toast({ title: 'ক্রয় সংরক্ষিত হয়েছে' });
-      setForm({
-        supplier_id: '', date: isoDate(), material: '', quantity: 0, unit: 'ft',
-        unit_cost: 0, paid: 0, notes: '', branch_id: '',
-      });
+      if (isEdit) await PurchasesApi.update(purchase.id, form);
+      else await PurchasesApi.create(form);
+      toast({ title: isEdit ? 'ক্রয় সংশোধন হয়েছে' : 'ক্রয় সংরক্ষিত হয়েছে' });
       onSaved();
     } catch (err) {
       toast({ title: 'সংরক্ষণ করা যায়নি', description: err.message, variant: 'destructive' });
@@ -203,7 +231,7 @@ function PurchaseDialog({ open, onClose, suppliers, onSaved }) {
     <Dialog
       open={open}
       onClose={onClose}
-      title="নতুন ক্রয়"
+      title={isEdit ? 'ক্রয় সম্পাদনা' : 'নতুন ক্রয়'}
       size="lg"
       footer={
         <>

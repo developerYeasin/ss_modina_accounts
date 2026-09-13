@@ -1,23 +1,37 @@
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { Pencil, FileText, Plus, Phone, MapPin } from 'lucide-react';
-import { Customers } from '@/api/entities';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Pencil, FileText, Plus, Phone, MapPin, Wallet, ReceiptText, Trash2 } from 'lucide-react';
+import { Customers, Payments } from '@/api/entities';
 import {
-  Button, Card, CardContent, CardHeader, CardTitle, Loading, ErrorState, Badge,
+  Button, Card, CardContent, CardHeader, CardTitle, Loading, ErrorState, Badge, ConfirmDialog,
 } from '@/components/ui';
-import { PageHeader, InfoRow, DataTable, StatCard, StatusBadge } from '@/components/shared';
+import { useToast } from '@/components/ui/toast';
+import {
+  PageHeader, InfoRow, DataTable, StatCard, StatusBadge, PaymentDialog, PrintButton,
+} from '@/components/shared';
 import { bnDate, money } from '@/lib/utils';
 import { useSettings } from '@/hooks/useSettings';
 
 export default function CustomerDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const { currency } = useSettings();
+  // undefined = closed, null = new, row = editing
+  const [paying, setPaying] = useState(undefined);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['customer-detail', id],
     queryFn: () => Customers.detail(id),
   });
+
+  const refreshAll = () => {
+    refetch();
+    ['orders', 'payments', 'dashboard', 'daily'].forEach((k) => queryClient.invalidateQueries({ queryKey: [k] }));
+  };
 
   if (isLoading) return <Loading />;
   if (error) return <ErrorState error={error} onRetry={refetch} />;
@@ -32,6 +46,10 @@ export default function CustomerDetail() {
         back="/customers"
         actions={
           <>
+            <PrintButton />
+            <Button size="sm" variant="accent" onClick={() => setPaying(null)}>
+              <Wallet className="h-4 w-4" /> জমা নিন
+            </Button>
             <Button variant="outline" size="sm" onClick={() => navigate(`/customers/${id}/statement`)}>
               <FileText className="h-4 w-4" /> স্টেটমেন্ট
             </Button>
@@ -113,15 +131,36 @@ export default function CustomerDetail() {
           </Card>
 
           <Card>
-            <CardHeader><CardTitle>পেমেন্ট ({payments.length})</CardTitle></CardHeader>
+            <CardHeader className="flex-row items-center justify-between">
+              <CardTitle>জমা / পেমেন্ট ({payments.length})</CardTitle>
+              <Button size="sm" className="no-print" onClick={() => setPaying(null)}>
+                <Plus className="h-4 w-4" /> জমা নিন
+              </Button>
+            </CardHeader>
             <CardContent>
               <DataTable
                 columns={[
                   { key: 'date', label: 'তারিখ', render: (p) => bnDate(p.date) },
-                  { key: 'order_number', label: 'অর্ডার', render: (p) => p.order_number || '—' },
+                  { key: 'order_number', label: 'অর্ডার', render: (p) => p.order_number || 'সাধারণ জমা' },
                   { key: 'method', label: 'মাধ্যম' },
+                  { key: 'received_by', label: 'গ্রহণকারী', render: (p) => p.received_by || '—' },
                   { key: 'amount', label: 'পরিমাণ', align: 'right', render: (p) => (
                     <span className="num font-medium">{money(p.amount, currency)}</span>
+                  ) },
+                  { key: 'actions', label: '', align: 'right', render: (p) => (
+                    <span className="no-print flex justify-end gap-1">
+                      <Button variant="ghost" size="icon" title="জমা রসিদ প্রিন্ট" aria-label="রসিদ"
+                        onClick={() => navigate(`/payments/${p.id}/receipt`)}>
+                        <ReceiptText className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" title="সংশোধন" aria-label="সংশোধন"
+                        onClick={() => setPaying(p)}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" aria-label="মুছুন" onClick={() => setDeleteTarget(p)}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </span>
                   ) },
                 ]}
                 rows={payments}
@@ -131,6 +170,33 @@ export default function CustomerDetail() {
           </Card>
         </div>
       </div>
+
+      {/* A general deposit on the account; to pay one bill, open that order. */}
+      <PaymentDialog
+        open={paying !== undefined}
+        payment={paying}
+        onClose={() => setPaying(undefined)}
+        customerId={customer.id}
+        due={summary.due}
+        onSaved={(saved) => {
+          const wasNew = !paying;
+          setPaying(undefined);
+          refreshAll();
+          if (wasNew && saved?.id) navigate(`/payments/${saved.id}/receipt`);
+        }}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+        title="জমা মুছবেন?"
+        message={`${money(deleteTarget?.amount, currency)} জমাটি মুছে ফেলা হবে।`}
+        onConfirm={async () => {
+          await Payments.delete(deleteTarget.id);
+          toast({ title: 'জমা মুছে ফেলা হয়েছে' });
+          refreshAll();
+        }}
+      />
     </div>
   );
 }

@@ -1,6 +1,6 @@
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Printer } from 'lucide-react';
+import { Printer, Pencil } from 'lucide-react';
 import { Orders } from '@/api/entities';
 import { Button, Loading, ErrorState } from '@/components/ui';
 import { PageHeader, PrintDoc, PrintTable, PrintTotals } from '@/components/shared';
@@ -8,6 +8,7 @@ import { bnDate, lineAmount, money, num, qty } from '@/lib/utils';
 
 export default function OrderInvoice() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['order-detail', id],
     queryFn: () => Orders.detail(id),
@@ -31,9 +32,15 @@ export default function OrderInvoice() {
           subtitle={order.order_number}
           back={`/orders/${id}`}
           actions={
-            <Button size="sm" onClick={() => window.print()}>
-              <Printer className="h-4 w-4" /> প্রিন্ট
-            </Button>
+            <>
+              {/* ভুল হলে মেমো ঠিক করুন — সংশোধনের পর এই পাতাই নতুন হিসাব দেখাবে। */}
+              <Button variant="outline" size="sm" onClick={() => navigate(`/orders/${id}/edit`)}>
+                <Pencil className="h-4 w-4" /> মেমো সংশোধন
+              </Button>
+              <Button size="sm" onClick={() => window.print()}>
+                <Printer className="h-4 w-4" /> প্রিন্ট
+              </Button>
+            </>
           }
         />
       </div>

@@ -515,3 +515,76 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
   INDEX idx_suppay_date (date),
   CONSTRAINT fk_suppay_supplier FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================
+-- Owner account, bank accounts, branch transfers
+-- ============================================================
+
+-- ---------- মালিকের হিসাব ----------
+-- flow = 'withdraw' (মালিক দোকান থেকে নিলেন) | 'invest' (মালিক দোকানে দিলেন)
+CREATE TABLE IF NOT EXISTS owner_txns (
+  id          CHAR(24) NOT NULL PRIMARY KEY,
+  date        DATE NOT NULL,
+  flow        VARCHAR(20) NOT NULL DEFAULT 'withdraw',
+  amount      DECIMAL(14,2) NOT NULL DEFAULT 0,
+  method      VARCHAR(30) NOT NULL DEFAULT 'Cash',
+  owner_name  VARCHAR(190) NULL,
+  notes       TEXT NULL,
+  created_date  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_date  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  created_by_id CHAR(24) NULL,
+  INDEX idx_owner_date (date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------- ব্যাংক ----------
+CREATE TABLE IF NOT EXISTS bank_accounts (
+  id              CHAR(24) NOT NULL PRIMARY KEY,
+  name            VARCHAR(190) NOT NULL,
+  bank_name       VARCHAR(190) NULL,
+  account_no      VARCHAR(60) NULL,
+  branch          VARCHAR(190) NULL,
+  opening_balance DECIMAL(14,2) NOT NULL DEFAULT 0,
+  notes           TEXT NULL,
+  active          TINYINT(1) NOT NULL DEFAULT 1,
+  created_date  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_date  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  created_by_id CHAR(24) NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- flow = 'deposit' (দোকানের ক্যাশ থেকে ব্যাংকে জমা) | 'withdraw' (ব্যাংক থেকে উঠিয়ে ক্যাশে)
+CREATE TABLE IF NOT EXISTS bank_txns (
+  id           CHAR(24) NOT NULL PRIMARY KEY,
+  account_id   CHAR(24) NOT NULL,
+  account_name VARCHAR(190) NULL,
+  date         DATE NOT NULL,
+  flow         VARCHAR(20) NOT NULL DEFAULT 'deposit',
+  amount       DECIMAL(14,2) NOT NULL DEFAULT 0,
+  reference    VARCHAR(120) NULL,
+  notes        TEXT NULL,
+  created_date  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_date  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  created_by_id CHAR(24) NULL,
+  INDEX idx_banktxn_account (account_id),
+  INDEX idx_banktxn_date (date),
+  CONSTRAINT fk_banktxn_account FOREIGN KEY (account_id) REFERENCES bank_accounts(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------- শাখা থেকে শাখায় মাল পাঠানো / আনা ----------
+-- Goods only — the amount is the value of the goods, not cash, so it never
+-- touches the daily cash sheet.
+CREATE TABLE IF NOT EXISTS branch_transfers (
+  id               CHAR(24) NOT NULL PRIMARY KEY,
+  date             DATE NOT NULL,
+  from_branch_id   CHAR(24) NULL,
+  from_branch_name VARCHAR(190) NULL,
+  to_branch_id     CHAR(24) NULL,
+  to_branch_name   VARCHAR(190) NULL,
+  items_json       LONGTEXT NULL,
+  total_amount     DECIMAL(14,2) NOT NULL DEFAULT 0,
+  sent_by          VARCHAR(190) NULL,
+  notes            TEXT NULL,
+  created_date  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_date  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  created_by_id CHAR(24) NULL,
+  INDEX idx_transfer_date (date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

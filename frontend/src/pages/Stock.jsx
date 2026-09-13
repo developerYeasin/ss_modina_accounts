@@ -1,17 +1,25 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Boxes, AlertTriangle, Pencil, Trash2, ArrowUpDown } from 'lucide-react';
-import { StockItem, Stock, StockAdjustment } from '@/api/entities';
+import { StockItem, Stock, StockAdjustment, Customer } from '@/api/entities';
 import {
   Button, Loading, ErrorState, EmptyState, Dialog, Field, Input, Select,
   Textarea, ConfirmDialog, Badge, Card, CardContent, CardHeader, CardTitle, Tabs,
 } from '@/components/ui';
 import { useToast } from '@/components/ui/toast';
-import { PageHeader, SearchInput, DataTable, StatCard } from '@/components/shared';
+import { PageHeader, SearchInput, DataTable, StatCard, PAYMENT_METHODS } from '@/components/shared';
 import { bnDate, isoDate, money, num, qty } from '@/lib/utils';
 import { useSettings } from '@/hooks/useSettings';
 
 const CATEGORIES = ['Aluminium', 'SS', 'Glass', 'Accessory', 'Other'];
+
+/** স্টক কমে দুইভাবে — বিক্রি (টাকা আসে) আর নিজে ব্যবহার (শুধু মাল কমে)। */
+const MOVE_TYPES = {
+  sale: { label: 'বিক্রি', badge: 'success', hint: 'স্টক কমবে, টাকা আজকের জমা ও হাতে নগদে যোগ হবে' },
+  use: { label: 'নিজে ব্যবহার', badge: 'warning', hint: 'দোকানে কেটে পণ্য বানাতে ব্যবহার — শুধু স্টক কমবে, টাকা নয়' },
+  in: { label: 'স্টক যোগ', badge: 'info', hint: 'নতুন মাল এসেছে — স্টক বাড়বে' },
+  adjust: { label: 'সমন্বয়', badge: 'secondary', hint: 'গণনা ঠিক করা — বাড়াতে ধনাত্মক, কমাতে ঋণাত্মক' },
+};
 const blank = {
   name: '', category: 'Aluminium', opening_stock: 0, current_stock: 0,
   minimum_stock: 0, unit: 'ft', price: 0, notes: '',
@@ -64,6 +72,7 @@ export default function StockPage() {
     <div>
       <PageHeader
         title="স্টক"
+        print
         subtitle={`${filtered.length} টি আইটেম`}
         actions={
           <Button size="sm" onClick={() => setEditing(blank)}>
@@ -98,7 +107,7 @@ export default function StockPage() {
       <Tabs
         tabs={[
           { value: 'items', label: 'আইটেম', count: items.length },
-          { value: 'history', label: 'সমন্বয়ের ইতিহাস' },
+          { value: 'history', label: 'ইতিহাস (বিক্রি / ব্যবহার)' },
         ]}
         value={tab}
         onChange={setTab}
@@ -137,8 +146,8 @@ export default function StockPage() {
               ) },
               { key: 'actions', label: '', align: 'right', render: (it) => (
                 <span className="flex justify-end gap-1">
-                  <Button variant="ghost" size="icon" onClick={() => setAdjusting(it)} aria-label="সমন্বয়">
-                    <ArrowUpDown className="h-4 w-4" />
+                  <Button variant="outline" size="sm" className="no-print" onClick={() => setAdjusting(it)}>
+                    <ArrowUpDown className="h-4 w-4" /> বিক্রি / ব্যবহার
                   </Button>
                   <Button variant="ghost" size="icon" onClick={() => setEditing(it)} aria-label="সম্পাদনা">
                     <Pencil className="h-4 w-4" />
@@ -166,10 +175,18 @@ export default function StockPage() {
             { key: 'stock_name', label: 'আইটেম', render: (a) => (
               <span className="font-medium">{a.stock_name}</span>
             ) },
+            { key: 'type', label: 'ধরন', render: (a) => (
+              <Badge variant={MOVE_TYPES[a.type]?.badge || 'secondary'}>
+                {MOVE_TYPES[a.type]?.label || 'সমন্বয়'}
+              </Badge>
+            ) },
             { key: 'quantity', label: 'পরিমাণ', align: 'right', render: (a) => (
               <span className={num(a.quantity) >= 0 ? 'num text-emerald-700' : 'num text-destructive'}>
                 {num(a.quantity) >= 0 ? '+' : ''}{qty(a.quantity)}
               </span>
+            ) },
+            { key: 'amount', label: 'বিক্রির টাকা', align: 'right', render: (a) => (
+              num(a.amount) > 0 ? <span className="num font-medium">{money(a.amount, currency)}</span> : '—'
             ) },
             { key: 'reason', label: 'কারণ', render: (a) => a.reason || '—' },
             { key: 'notes', label: 'নোট', render: (a) => a.notes || '—' },
@@ -188,7 +205,11 @@ export default function StockPage() {
       <AdjustDialog
         item={adjusting}
         onClose={() => setAdjusting(null)}
-        onSaved={() => { setAdjusting(null); invalidate(); }}
+        onSaved={() => {
+          setAdjusting(null);
+          invalidate();
+          ['payments', 'daily', 'dashboard'].forEach((k) => queryClient.invalidateQueries({ queryKey: [k] }));
+        }}
       />
 
       <ConfirmDialog
@@ -295,21 +316,50 @@ function ItemDialog({ item, onClose, onSaved }) {
   );
 }
 
+const blankMove = (item) => ({
+  type: 'sale', date: isoDate(), quantity: '', rate: item?.price || '', amount: '',
+  customer_id: '', method: 'Cash', reason: '', notes: '',
+});
+
 function AdjustDialog({ item, onClose, onSaved }) {
   const { toast } = useToast();
-  const [form, setForm] = useState({ date: isoDate(), quantity: '', reason: '', notes: '' });
+  const { currency } = useSettings();
+  const [form, setForm] = useState(blankMove(item));
   const [busy, setBusy] = useState(false);
+
+  const key = item?.id || null;
+  const [lastKey, setLastKey] = useState(key);
+  if (key !== lastKey) {
+    setLastKey(key);
+    if (item) setForm(blankMove(item));
+  }
+
+  const { data: customers = [] } = useQuery({
+    queryKey: ['customers'], queryFn: () => Customer.list('name', 1000), enabled: form.type === 'sale',
+  });
+
+  const saleAmount = form.amount !== '' ? num(form.amount) : Math.abs(num(form.quantity)) * num(form.rate);
+  const after = num(item?.current_stock) + (
+    form.type === 'in' ? Math.abs(num(form.quantity))
+      : form.type === 'adjust' ? num(form.quantity) : -Math.abs(num(form.quantity))
+  );
 
   async function save() {
     if (!num(form.quantity)) {
-      toast({ title: 'পরিমাণ দিন (বাড়াতে + , কমাতে −)', variant: 'destructive' });
+      toast({ title: 'পরিমাণ দিন', variant: 'destructive' });
+      return;
+    }
+    if (form.type === 'sale' && !(saleAmount > 0)) {
+      toast({ title: 'বিক্রির দর বা মোট টাকা দিন', variant: 'destructive' });
       return;
     }
     setBusy(true);
     try {
       await Stock.adjust(item.id, form);
-      toast({ title: 'স্টক সমন্বয় হয়েছে' });
-      setForm({ date: isoDate(), quantity: '', reason: '', notes: '' });
+      toast({
+        title: `${MOVE_TYPES[form.type].label} সংরক্ষিত হয়েছে`,
+        description: form.type === 'sale' ? `${money(saleAmount, currency)} জমায় যোগ হয়েছে` : undefined,
+      });
       onSaved();
     } catch (err) {
       toast({ title: 'সমন্বয় করা যায়নি', description: err.message, variant: 'destructive' });
@@ -324,7 +374,7 @@ function AdjustDialog({ item, onClose, onSaved }) {
     <Dialog
       open={Boolean(item)}
       onClose={onClose}
-      title="স্টক সমন্বয়"
+      title="স্টক কমানো / বাড়ানো"
       description={item ? `${item.name} — বর্তমান ${qty(item.current_stock, item.unit)}` : ''}
       footer={
         <>
@@ -333,23 +383,68 @@ function AdjustDialog({ item, onClose, onSaved }) {
         </>
       }
     >
+      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {Object.entries(MOVE_TYPES).map(([k, t]) => (
+          <button
+            key={k} type="button" onClick={() => set('type', k)}
+            className={`rounded-lg border px-2 py-2 text-sm font-medium transition-colors ${
+              form.type === k ? 'border-primary bg-primary text-primary-foreground' : 'bg-white/70 hover:bg-white'}`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <p className="mb-4 rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">{MOVE_TYPES[form.type].hint}</p>
+
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="তারিখ">
           <Input type="date" value={form.date} onChange={(e) => set('date', e.target.value)} />
         </Field>
-        <Field label="পরিমাণ" required hint="বাড়াতে ধনাত্মক, কমাতে ঋণাত্মক">
+        <Field label={`পরিমাণ (${item?.unit || ''})`} required>
           <Input
             type="number" step="0.001" autoFocus value={form.quantity}
             onChange={(e) => set('quantity', e.target.value)}
-            placeholder="যেমন: 25 অথবা -10"
+            placeholder={form.type === 'adjust' ? 'যেমন: 25 অথবা -10' : 'যেমন: 10'}
           />
         </Field>
+
+        {form.type === 'sale' && (
+          <>
+            <Field label="দর (প্রতি একক)">
+              <Input type="number" step="0.01" min="0" value={form.rate} onChange={(e) => set('rate', e.target.value)} />
+            </Field>
+            <Field label="মোট টাকা" hint="খালি রাখলে পরিমাণ × দর">
+              <Input
+                type="number" step="0.01" min="0" value={form.amount}
+                placeholder={String(Math.abs(num(form.quantity)) * num(form.rate) || '')}
+                onChange={(e) => set('amount', e.target.value)}
+              />
+            </Field>
+            <Field label="কাস্টমার (ঐচ্ছিক)">
+              <Select value={form.customer_id} onChange={(e) => set('customer_id', e.target.value)}>
+                <option value="">নগদ বিক্রি</option>
+                {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </Select>
+            </Field>
+            <Field label="মাধ্যম">
+              <Select value={form.method} onChange={(e) => set('method', e.target.value)}>
+                {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
+              </Select>
+            </Field>
+          </>
+        )}
+
         <Field label="কারণ" className="sm:col-span-2">
           <Input
             value={form.reason} onChange={(e) => set('reason', e.target.value)}
-            placeholder="ক্রয় / ব্যবহার / নষ্ট / গণনা সংশোধন"
+            placeholder={form.type === 'use' ? 'যেমন: গেট বানাতে কাটা হয়েছে' : ''}
           />
         </Field>
+
+        <div className="flex justify-between rounded-lg border bg-muted/30 p-3 text-sm sm:col-span-2">
+          <span className="text-muted-foreground">এরপর স্টক থাকবে</span>
+          <span className="num font-bold">{qty(after, item?.unit)}</span>
+        </div>
         <Field label="নোট" className="sm:col-span-2">
           <Textarea value={form.notes} onChange={(e) => set('notes', e.target.value)} />
         </Field>

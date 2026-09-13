@@ -72,6 +72,7 @@ export default function Customers() {
     <div>
       <PageHeader
         title="কাস্টমার"
+        print
         subtitle={`${filtered.length} জন`}
         actions={
           <>

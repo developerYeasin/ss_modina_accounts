@@ -40,6 +40,10 @@ const SettingsPage = lazy(() => import('@/pages/Settings'));
 const Profile = lazy(() => import('@/pages/Profile'));
 const UsersPage = lazy(() => import('@/pages/Users'));
 const NotFound = lazy(() => import('@/pages/NotFound'));
+const PaymentReceipt = lazy(() => import('@/pages/PaymentReceipt'));
+const OwnerAccount = lazy(() => import('@/pages/OwnerAccount'));
+const BankPage = lazy(() => import('@/pages/Bank'));
+const BranchTransfers = lazy(() => import('@/pages/BranchTransfers'));
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -104,9 +108,15 @@ export default function App() {
 
             <Route path="payments" element={<Payments />} />
             <Route path="payments/new" element={<PaymentForm />} />
+            <Route path="payments/:id/receipt" element={<PaymentReceipt />} />
+
+            <Route path="owner" element={<OwnerAccount />} />
+            <Route path="bank" element={<BankPage />} />
+            <Route path="branch-transfers" element={<BranchTransfers />} />
 
             <Route path="quotations" element={<Quotations />} />
             <Route path="quotations/new" element={<QuotationForm />} />
+            <Route path="quotations/:id/edit" element={<QuotationForm />} />
             <Route path="quotations/:id/invoice" element={<QuotationInvoice />} />
 
             <Route path="materials" element={<Calculators />} />

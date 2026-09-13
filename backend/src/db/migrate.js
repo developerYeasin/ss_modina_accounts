@@ -14,6 +14,11 @@ const env = require('../config/env');
  */
 const ADDED_COLUMNS = [
   ['suppliers', 'opening_due', 'DECIMAL(14,2) NOT NULL DEFAULT 0 AFTER materials_supplied'],
+  // স্টক দুইভাবে কমে: বিক্রি (টাকা আসে) বা নিজে ব্যবহার।
+  ['stock_adjustments', 'type', "VARCHAR(20) NOT NULL DEFAULT 'adjust' AFTER quantity"],
+  ['stock_adjustments', 'rate', 'DECIMAL(14,2) NOT NULL DEFAULT 0 AFTER type'],
+  ['stock_adjustments', 'amount', 'DECIMAL(14,2) NOT NULL DEFAULT 0 AFTER rate'],
+  ['stock_adjustments', 'payment_id', 'CHAR(24) NULL AFTER amount'],
 ];
 
 async function addMissingColumns(conn) {

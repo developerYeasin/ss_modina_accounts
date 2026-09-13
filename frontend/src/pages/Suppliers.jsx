@@ -62,6 +62,7 @@ export default function Suppliers() {
     <div>
       <PageHeader
         title="সরবরাহকারী"
+        print
         subtitle={`${filtered.length} জন`}
         actions={
           <Button size="sm" onClick={() => setEditing(blank)}>

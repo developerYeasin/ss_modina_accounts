@@ -35,13 +35,14 @@ const dashboard = asyncH(async (req, res) => {
   ]);
 
   const n = (r) => Number(r.v);
+  const [flow, before] = await Promise.all([cashFlow('=', day), cashFlow('<', day)]);
   res.json({
     date: day,
     today: {
       sales: n(todaySales),
       payments: n(todayPayments),
       expenses: n(todayExpenses),
-      cash: n(todayPayments) - n(todayExpenses),
+      cash: before.net + flow.net,
     },
     month: {
       from, to,
@@ -63,39 +64,81 @@ const dashboard = asyncH(async (req, res) => {
   });
 });
 
+/**
+ * Every movement of cash through the drawer, summed for one date condition.
+ *
+ *   in  = customer collections + owner investment + bank withdrawal + loan taken / loan repaid to us
+ *   out = expenses (staff advance & salary are booked as expenses) + cash paid on purchases
+ *       + supplier payments + owner withdrawal + bank deposit + loan given / loan repaid by us
+ *
+ * The daily sheet and its opening balance both come from here, so the জের carried
+ * into tomorrow is always exactly today's closing cash.
+ */
+async function cashFlow(op, day) {
+  const w = `date ${op} ?`;
+  const [r] = await query(
+      `SELECT
+         (SELECT COALESCE(SUM(amount),0) FROM payments WHERE archived = 0 AND ${w}) AS collected,
+         (SELECT COALESCE(SUM(amount),0) FROM expenses WHERE archived = 0 AND ${w}) AS expenses,
+         (SELECT COALESCE(SUM(paid),0) FROM purchases WHERE ${w}) AS purchase_paid,
+         (SELECT COALESCE(SUM(amount),0) FROM supplier_payments WHERE ${w}) AS supplier_paid,
+         (SELECT COALESCE(SUM(amount),0) FROM owner_txns WHERE flow = 'invest' AND ${w}) AS owner_invest,
+         (SELECT COALESCE(SUM(amount),0) FROM owner_txns WHERE flow = 'withdraw' AND ${w}) AS owner_withdraw,
+         (SELECT COALESCE(SUM(amount),0) FROM bank_txns WHERE flow = 'withdraw' AND ${w}) AS bank_withdraw,
+         (SELECT COALESCE(SUM(amount),0) FROM bank_txns WHERE flow = 'deposit' AND ${w}) AS bank_deposit,
+         (SELECT COALESCE(SUM(t.amount),0) FROM loan_txns t JOIN loans l ON l.id = t.loan_id
+           WHERE t.${w} AND ((l.type = 'Borrowed' AND t.flow = 'increase')
+                          OR (l.type = 'Lent' AND t.flow <> 'increase'))) AS loan_in,
+         (SELECT COALESCE(SUM(t.amount),0) FROM loan_txns t JOIN loans l ON l.id = t.loan_id
+           WHERE t.${w} AND ((l.type = 'Lent' AND t.flow = 'increase')
+                          OR (l.type = 'Borrowed' AND t.flow <> 'increase'))) AS loan_out`,
+    Array(11).fill(day),
+  );
+  const v = Object.fromEntries(Object.entries(r).map(([k, x]) => [k, Number(x)]));
+  v.cash_in = v.collected + v.owner_invest + v.bank_withdraw + v.loan_in;
+  v.cash_out = v.expenses + v.purchase_paid + v.supplier_paid + v.owner_withdraw
+    + v.bank_deposit + v.loan_out;
+  v.net = v.cash_in - v.cash_out;
+  return v;
+}
+
 /** GET /api/reports/daily?date= — the "দৈনিক রিপোর্ট" screen. */
 const daily = asyncH(async (req, res) => {
   const day = req.query.date || today();
-  const [orders, payments, expenses, purchases, carried] = await Promise.all([
+  const [
+    orders, payments, expenses, purchases, supplierPayments, ownerTxns, bankTxns, loanTxns,
+    flow, before,
+  ] = await Promise.all([
     query('SELECT * FROM orders WHERE order_date = ? AND archived = 0 ORDER BY created_date DESC', [day]),
     query('SELECT * FROM payments WHERE date = ? AND archived = 0 ORDER BY created_date DESC', [day]),
     query('SELECT * FROM expenses WHERE date = ? AND archived = 0 ORDER BY created_date DESC', [day]),
     query('SELECT * FROM purchases WHERE date = ? ORDER BY created_date DESC', [day]),
-    // গতকালের ক্যাশ: every earlier day's collection minus its expenses, so the
-    // cash left in the drawer yesterday opens today's sheet automatically.
-    query(
-      `SELECT
-         (SELECT COALESCE(SUM(amount),0) FROM payments WHERE archived = 0 AND date < ?)
-       - (SELECT COALESCE(SUM(amount),0) FROM expenses WHERE archived = 0 AND date < ?)
-         AS opening`,
-      [day, day],
-    ),
+    query('SELECT * FROM supplier_payments WHERE date = ? ORDER BY created_date DESC', [day]),
+    query('SELECT * FROM owner_txns WHERE date = ? ORDER BY created_date DESC', [day]),
+    query('SELECT * FROM bank_txns WHERE date = ? ORDER BY created_date DESC', [day]),
+    query(`SELECT t.*, l.type AS loan_type FROM loan_txns t JOIN loans l ON l.id = t.loan_id
+            WHERE t.date = ? ORDER BY t.created_date DESC`, [day]),
+    cashFlow('=', day),
+    // গতকালের জের: every earlier day's cash in minus cash out.
+    cashFlow('<', day),
   ]);
   const sum = (rows, key) => rows.reduce((a, r) => a + Number(r[key] || 0), 0);
-  const openingCash = Number(carried[0]?.opening || 0);
-  const netCash = sum(payments, 'amount') - sum(expenses, 'amount');
+  const openingCash = before.net;
   res.json({
     date: day,
     orders, payments, expenses, purchases,
+    supplier_payments: supplierPayments,
+    owner_txns: ownerTxns,
+    bank_txns: bankTxns,
+    loan_txns: loanTxns,
     summary: {
       sales: sum(orders, 'total_selling'),
-      collected: sum(payments, 'amount'),
-      expenses: sum(expenses, 'amount'),
-      purchases: sum(purchases, 'total_cost'),
-      opening_cash: openingCash,
-      net_cash: netCash,
-      closing_cash: openingCash + netCash,
       new_due: sum(orders, 'due'),
+      purchases: sum(purchases, 'total_cost'),
+      ...flow,
+      opening_cash: openingCash,
+      net_cash: flow.net,
+      closing_cash: openingCash + flow.net,
     },
   });
 });

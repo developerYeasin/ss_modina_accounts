@@ -1,13 +1,15 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Wallet, Download, Trash2 } from 'lucide-react';
+import { Plus, Wallet, Download, Trash2, Pencil, ReceiptText } from 'lucide-react';
 import { Payment, Payments as PaymentsApi } from '@/api/entities';
 import {
   Button, Loading, ErrorState, EmptyState, Select, Input, ConfirmDialog,
 } from '@/components/ui';
 import { useToast } from '@/components/ui/toast';
-import { PageHeader, SearchInput, DataTable, StatCard, PAYMENT_METHODS } from '@/components/shared';
+import {
+  PageHeader, SearchInput, DataTable, StatCard, PAYMENT_METHODS, PaymentDialog, PrintButton,
+} from '@/components/shared';
 import { bnDate, downloadCsv, isoDate, money, monthStart, sum } from '@/lib/utils';
 import { useSettings } from '@/hooks/useSettings';
 
@@ -21,6 +23,7 @@ export default function Payments() {
   const [method, setMethod] = useState('');
   const [range, setRange] = useState({ from: monthStart(), to: isoDate() });
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [editing, setEditing] = useState(null);
 
   const { data: payments = [], isLoading, error, refetch } = useQuery({
     queryKey: ['payments'],
@@ -49,6 +52,7 @@ export default function Payments() {
         subtitle={`${filtered.length} টি এন্ট্রি`}
         actions={
           <>
+            <PrintButton />
             <Button
               variant="outline" size="sm"
               onClick={() => downloadCsv('payments', filtered, [
@@ -102,13 +106,27 @@ export default function Payments() {
             <span className="num font-semibold text-emerald-700">{money(p.amount, currency)}</span>
           ) },
           { key: 'actions', label: '', align: 'right', render: (p) => (
-            <Button
-              variant="ghost" size="icon"
-              onClick={(e) => { e.stopPropagation(); setDeleteTarget(p); }}
-              aria-label="মুছুন"
-            >
-              <Trash2 className="h-4 w-4 text-destructive" />
-            </Button>
+            <span className="no-print flex justify-end gap-1">
+              <Button
+                variant="ghost" size="icon" title="জমা রসিদ প্রিন্ট" aria-label="রসিদ"
+                onClick={(e) => { e.stopPropagation(); navigate(`/payments/${p.id}/receipt`); }}
+              >
+                <ReceiptText className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost" size="icon" title="সংশোধন" aria-label="সংশোধন"
+                onClick={(e) => { e.stopPropagation(); setEditing(p); }}
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost" size="icon"
+                onClick={(e) => { e.stopPropagation(); setDeleteTarget(p); }}
+                aria-label="মুছুন"
+              >
+                <Trash2 className="h-4 w-4 text-destructive" />
+              </Button>
+            </span>
           ) },
         ]}
         rows={filtered}
@@ -131,6 +149,16 @@ export default function Payments() {
             </p>
           </div>
         )}
+      />
+
+      <PaymentDialog
+        open={Boolean(editing)}
+        payment={editing}
+        onClose={() => setEditing(null)}
+        onSaved={() => {
+          setEditing(null);
+          ['payments', 'orders', 'dashboard', 'daily'].forEach((k) => queryClient.invalidateQueries({ queryKey: [k] }));
+        }}
       />
 
       <ConfirmDialog

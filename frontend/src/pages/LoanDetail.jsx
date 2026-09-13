@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Plus, Phone } from 'lucide-react';
+import { Plus, Phone, Pencil, Trash2 } from 'lucide-react';
 import { Loans } from '@/api/entities';
 import {
   Button, Card, CardContent, CardHeader, CardTitle, Loading, ErrorState,
-  Dialog, Field, Input, Select, Textarea, Badge,
+  Dialog, Field, Input, Select, Textarea, Badge, ConfirmDialog,
 } from '@/components/ui';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader, InfoRow, DataTable, StatCard, PAYMENT_METHODS } from '@/components/shared';
@@ -17,7 +17,10 @@ const TYPE_LABELS = { Borrowed: 'আমি ধার নিয়েছি', Len
 export default function LoanDetail() {
   const { id } = useParams();
   const { currency } = useSettings();
+  const { toast } = useToast();
   const [txnOpen, setTxnOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['loan-detail', id],
@@ -94,6 +97,16 @@ export default function LoanDetail() {
                 { key: 'balance', label: 'ব্যালান্স', align: 'right', render: (t) => (
                   <span className="num font-semibold">{money(t.balance, currency)}</span>
                 ) },
+                { key: 'actions', label: '', align: 'right', render: (t) => (
+                  <span className="no-print flex justify-end gap-1">
+                    <Button variant="ghost" size="icon" onClick={() => setEditing(t)} aria-label="সংশোধন">
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(t)} aria-label="মুছুন">
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </span>
+                ) },
               ]}
               rows={ledger}
               empty={<p className="py-4 text-sm text-muted-foreground">কোনো লেনদেন নেই</p>}
@@ -103,21 +116,46 @@ export default function LoanDetail() {
       </div>
 
       <TxnDialog
-        open={txnOpen}
-        onClose={() => setTxnOpen(false)}
+        open={txnOpen || Boolean(editing)}
+        txn={editing}
+        onClose={() => { setTxnOpen(false); setEditing(null); }}
         loanId={id}
-        onSaved={() => { setTxnOpen(false); refetch(); }}
+        onSaved={() => { setTxnOpen(false); setEditing(null); refetch(); }}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+        title="লেনদেন মুছবেন?"
+        message={`${money(deleteTarget?.amount, currency)} — ব্যালান্স পুনরায় হিসাব হবে।`}
+        onConfirm={async () => {
+          await Loans.deleteTxn(id, deleteTarget.id);
+          refetch();
+          toast({ title: 'মুছে ফেলা হয়েছে' });
+        }}
       />
     </div>
   );
 }
 
-function TxnDialog({ open, onClose, loanId, onSaved }) {
+function TxnDialog({ open, onClose, loanId, onSaved, txn }) {
   const { toast } = useToast();
   const [form, setForm] = useState({
     date: isoDate(), flow: 'increase', amount: '', method: 'Cash', notes: '',
   });
   const [busy, setBusy] = useState(false);
+  const isEdit = Boolean(txn?.id);
+
+  const key = open ? txn?.id || 'new' : null;
+  const [lastKey, setLastKey] = useState(null);
+  if (key !== lastKey) {
+    setLastKey(key);
+    if (open) {
+      setForm(isEdit
+        ? { date: txn.date, flow: txn.flow, amount: txn.amount, method: txn.method || 'Cash', notes: txn.notes || '' }
+        : { date: isoDate(), flow: 'increase', amount: '', method: 'Cash', notes: '' });
+    }
+  }
 
   async function save() {
     if (!num(form.amount)) {
@@ -126,9 +164,9 @@ function TxnDialog({ open, onClose, loanId, onSaved }) {
     }
     setBusy(true);
     try {
-      await Loans.addTxn(loanId, form);
-      toast({ title: 'লেনদেন যোগ হয়েছে' });
-      setForm({ date: isoDate(), flow: 'increase', amount: '', method: 'Cash', notes: '' });
+      if (isEdit) await Loans.updateTxn(loanId, txn.id, form);
+      else await Loans.addTxn(loanId, form);
+      toast({ title: isEdit ? 'লেনদেন সংশোধন হয়েছে' : 'লেনদেন যোগ হয়েছে' });
       onSaved();
     } catch (err) {
       toast({ title: 'সংরক্ষণ করা যায়নি', description: err.message, variant: 'destructive' });
@@ -143,7 +181,7 @@ function TxnDialog({ open, onClose, loanId, onSaved }) {
     <Dialog
       open={open}
       onClose={onClose}
-      title="নতুন লেনদেন"
+      title={isEdit ? 'লেনদেন সংশোধন' : 'নতুন লেনদেন'}
       footer={
         <>
           <Button variant="outline" onClick={onClose}>বাতিল</Button>

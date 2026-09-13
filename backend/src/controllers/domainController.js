@@ -71,8 +71,65 @@ const createPayment = asyncH(async (req, res) => {
   res.status(201).json(await orders.createPayment(req.body, req.user));
 });
 
+const updatePayment = asyncH(async (req, res) => {
+  res.json(await orders.updatePayment(req.params.id, req.body || {}, req.user));
+});
+
 const deletePayment = asyncH(async (req, res) => {
   res.json(await orders.deletePayment(req.params.id, req.user));
+});
+
+/**
+ * জমা রসিদ — one installment, with the whole bill around it: the order total,
+ * what was paid before this slip, this slip, and what is still left. A house
+ * job paid in many parts gets a fresh slip each time.
+ */
+const paymentReceipt = asyncH(async (req, res) => {
+  const [payment] = await query('SELECT * FROM payments WHERE id = ? LIMIT 1', [req.params.id]);
+  if (!payment) throw notFound('পেমেন্ট পাওয়া যায়নি');
+
+  const [order] = payment.order_id
+    ? await query('SELECT * FROM orders WHERE id = ? LIMIT 1', [payment.order_id])
+    : [null];
+  const [customer] = payment.customer_id
+    ? await query('SELECT * FROM customers WHERE id = ? LIMIT 1', [payment.customer_id])
+    : [null];
+
+  // Everything paid against the same bill (the order, or the customer's account
+  // for a general deposit), in the order it was received.
+  const history = order
+    ? await query('SELECT * FROM payments WHERE order_id = ? AND archived = 0 ORDER BY date, created_date', [order.id])
+    : customer
+      ? await query('SELECT * FROM payments WHERE customer_id = ? AND archived = 0 ORDER BY date, created_date', [customer.id])
+      : [payment];
+  const idx = history.findIndex((p) => p.id === payment.id);
+  const paidBefore = history.slice(0, idx).reduce((a, p) => a + Number(p.amount), 0);
+  const paidUpto = paidBefore + Number(payment.amount);
+
+  let billTotal;
+  if (order) {
+    billTotal = Number(order.total_selling);
+  } else if (customer) {
+    const [{ billed }] = await query(
+      'SELECT COALESCE(SUM(total_selling),0) AS billed FROM orders WHERE customer_id = ? AND archived = 0',
+      [customer.id],
+    );
+    billTotal = Number(billed) + Number(customer.opening_due || 0);
+  } else {
+    billTotal = Number(payment.amount);
+  }
+
+  res.json({
+    payment,
+    order: order ? svc.serialize(getEntity('Order'), order) : null,
+    customer: customer || null,
+    installment: idx + 1,
+    history: history.slice(0, idx + 1),
+    bill_total: billTotal,
+    paid_before: paidBefore,
+    paid_upto: paidUpto,
+    remaining: Math.round((billTotal - paidUpto) * 100) / 100,
+  });
 });
 
 // ---------------- Customers ----------------
@@ -127,9 +184,19 @@ const customerDetail = asyncH(async (req, res) => {
 
 // ---------------- Purchases ----------------
 
-const createPurchase = asyncH(async (req, res) => {
+/** Correct a purchase; total and due are recomputed like on create. */
+const updatePurchase = asyncH(async (req, res) => {
   const Purchase = getEntity('Purchase');
-  const data = { ...req.body };
+  const before = await svc.get(Purchase, req.params.id);
+  const data = await purchaseTotals({ ...before, ...req.body });
+  const saved = await svc.update(Purchase, req.params.id, data);
+  await orders.audit(null, req.user, 'Purchase updated', 'Purchase', saved.id,
+    { total_cost: before.total_cost, paid: before.paid }, { total_cost: saved.total_cost, paid: saved.paid });
+  res.json(saved);
+});
+
+async function purchaseTotals(input) {
+  const data = { ...input };
   const total = Number(data.quantity || 0) * Number(data.unit_cost || 0);
   data.total_cost = Math.round(total * 100) / 100;
   data.due = Math.round((total - Number(data.paid || 0)) * 100) / 100;
@@ -141,7 +208,12 @@ const createPurchase = asyncH(async (req, res) => {
     const [b] = await query('SELECT name FROM branches WHERE id = ? LIMIT 1', [data.branch_id]);
     data.branch_name = b ? b.name : '';
   }
-  res.status(201).json(await svc.create(Purchase, data, req.user.id));
+  return data;
+}
+
+const createPurchase = asyncH(async (req, res) => {
+  const data = await purchaseTotals(req.body || {});
+  res.status(201).json(await svc.create(getEntity('Purchase'), data, req.user.id));
 });
 
 /**
@@ -325,6 +397,40 @@ const createLoanTxn = asyncH(async (req, res) => {
   res.status(201).json(result);
 });
 
+/** loans.balance is a cache of the txn rows; rebuild it after any edit or delete. */
+async function syncLoanBalance(conn, loanId) {
+  await conn.execute(
+    `UPDATE loans SET balance = (
+       SELECT COALESCE(SUM(CASE WHEN flow = 'increase' THEN amount ELSE -amount END), 0)
+         FROM loan_txns WHERE loan_id = ?) WHERE id = ?`,
+    [loanId, loanId],
+  );
+}
+
+const updateLoanTxn = asyncH(async (req, res) => {
+  const LoanTxn = getEntity('LoanTxn');
+  const before = await svc.get(LoanTxn, req.params.txnId);
+  if (before.loan_id !== req.params.id) throw notFound('লেনদেন পাওয়া যায়নি');
+  if (req.body.amount !== undefined && !Number(req.body.amount)) throw badRequest('পরিমাণ দিন');
+  const txn = await transaction(async (conn) => {
+    const row = await svc.update(LoanTxn, before.id, { ...req.body, loan_id: before.loan_id }, conn);
+    await syncLoanBalance(conn, before.loan_id);
+    return row;
+  });
+  res.json(txn);
+});
+
+const deleteLoanTxn = asyncH(async (req, res) => {
+  const LoanTxn = getEntity('LoanTxn');
+  const before = await svc.get(LoanTxn, req.params.txnId);
+  if (before.loan_id !== req.params.id) throw notFound('লেনদেন পাওয়া যায়নি');
+  await transaction(async (conn) => {
+    await svc.remove(LoanTxn, before.id, conn);
+    await syncLoanBalance(conn, before.loan_id);
+  });
+  res.json({ id: before.id, deleted: true });
+});
+
 // ---------------- Stock ----------------
 
 const createStockItem = asyncH(async (req, res) => {
@@ -334,24 +440,66 @@ const createStockItem = asyncH(async (req, res) => {
   res.status(201).json(await svc.create(StockItem, data, req.user.id));
 });
 
-/** Adjust stock by a signed quantity and log the adjustment. */
+/** Labels for the stock movement kinds. */
+const STOCK_TYPES = { in: 'স্টক যোগ', sale: 'বিক্রি', use: 'নিজে ব্যবহার', adjust: 'সমন্বয়' };
+
+/**
+ * Move stock. Two ways it goes down, kept apart so neither is lost:
+ *   sale — sold from stock: the money comes in as a payment (cash sheet + balance)
+ *   use  — cut and used in the shop to make goods: stock only, no money
+ * plus `in` (new stock) and `adjust` (a signed count correction).
+ */
 const adjustStock = asyncH(async (req, res) => {
-  const { quantity, reason, notes, date } = req.body || {};
-  const qty = Number(quantity);
+  const { reason, notes, date } = req.body || {};
+  const type = STOCK_TYPES[req.body?.type] ? req.body.type : 'adjust';
+  let qty = Number(req.body?.quantity);
   if (!Number.isFinite(qty) || qty === 0) throw badRequest('পরিমাণ দিন');
+  // Sale and use always take stock out, in always puts it in, whatever sign was typed.
+  if (type === 'sale' || type === 'use') qty = -Math.abs(qty);
+  if (type === 'in') qty = Math.abs(qty);
 
   const [item] = await query('SELECT * FROM stock_items WHERE id = ? LIMIT 1', [req.params.id]);
   if (!item) throw notFound('স্টক আইটেম পাওয়া যায়নি');
 
+  const day = date || new Date().toISOString().slice(0, 10);
+  const rate = type === 'sale' ? Number(req.body.rate || 0) : 0;
+  const amount = type === 'sale'
+    ? Math.round((req.body.amount !== undefined && req.body.amount !== ''
+      ? Number(req.body.amount) : Math.abs(qty) * rate) * 100) / 100
+    : 0;
+  if (type === 'sale' && !(amount > 0)) throw badRequest('বিক্রির টাকার পরিমাণ দিন');
+
   const result = await transaction(async (conn) => {
     await conn.execute('UPDATE stock_items SET current_stock = current_stock + ? WHERE id = ?',
       [qty, item.id]);
+
+    let paymentId = null;
+    if (type === 'sale') {
+      const [c] = req.body.customer_id
+        ? await query('SELECT id, name FROM customers WHERE id = ? LIMIT 1', [req.body.customer_id])
+        : [null];
+      const payment = await svc.create(getEntity('Payment'), {
+        customer_id: c?.id || null,
+        customer_name: c?.name || 'স্টক বিক্রি',
+        date: day,
+        amount,
+        method: req.body.method || 'Cash',
+        received_by: req.body.received_by || req.user.full_name,
+        notes: `স্টক বিক্রি: ${item.name} ${Math.abs(qty)} ${item.unit}${notes ? ` — ${notes}` : ''}`,
+      }, req.user.id, conn);
+      paymentId = payment.id;
+    }
+
     await svc.create(getEntity('StockAdjustment'), {
       stock_id: item.id,
       stock_name: item.name,
-      date: date || new Date().toISOString().slice(0, 10),
+      date: day,
       quantity: qty,
-      reason: reason || '',
+      type,
+      rate,
+      amount,
+      payment_id: paymentId,
+      reason: reason || STOCK_TYPES[type],
       notes: notes || '',
     }, req.user.id, conn);
     const [rows] = await conn.execute('SELECT * FROM stock_items WHERE id = ?', [item.id]);
@@ -367,9 +515,21 @@ const nextQuote = asyncH(async (_req, res) => {
 });
 
 const createQuotation = asyncH(async (req, res) => {
-  const Quotation = getEntity('Quotation');
-  const data = { ...req.body };
+  const data = await quoteTotals({ ...req.body });
   if (!data.quote_number) data.quote_number = await orders.nextQuoteNumber();
+  res.status(201).json(await svc.create(getEntity('Quotation'), data, req.user.id));
+});
+
+/** Correct a quotation; items and totals are recomputed like on create. */
+const updateQuotation = asyncH(async (req, res) => {
+  const Quotation = getEntity('Quotation');
+  const before = await svc.get(Quotation, req.params.id);
+  const data = await quoteTotals({ ...before, ...req.body });
+  res.json(await svc.update(Quotation, req.params.id, data));
+});
+
+async function quoteTotals(input) {
+  const data = { ...input };
   if (data.customer_id) {
     const [c] = await query('SELECT name, mobile FROM customers WHERE id = ? LIMIT 1', [data.customer_id]);
     data.customer_name = c ? c.name : '';
@@ -384,8 +544,9 @@ const createQuotation = asyncH(async (req, res) => {
   data.items_json = JSON.stringify(items);
   data.subtotal = Math.round(subtotal * 100) / 100;
   data.total = Math.round((subtotal - discount + Number(data.other_cost || 0)) * 100) / 100;
-  res.status(201).json(await svc.create(Quotation, data, req.user.id));
-});
+  delete data.items;
+  return data;
+}
 
 /** Turn an accepted quotation into a real order. */
 const convertQuotation = asyncH(async (req, res) => {
@@ -464,6 +625,39 @@ const createStaffAdvance = asyncH(async (req, res) => {
   });
 
   res.status(201).json(advance);
+});
+
+/** Correct an advance; its expense row is changed in the same transaction. */
+const updateStaffAdvance = asyncH(async (req, res) => {
+  const StaffAdvance = getEntity('StaffAdvance');
+  const before = await svc.get(StaffAdvance, req.params.id);
+  const amount = req.body.amount !== undefined ? Number(req.body.amount) : Number(before.amount);
+  if (!amount || amount <= 0) throw badRequest('অগ্রিমের পরিমাণ দিন');
+
+  let staff = { id: before.staff_id, name: before.staff_name };
+  if (req.body.staff_id && req.body.staff_id !== before.staff_id) {
+    [staff] = await query('SELECT id, name FROM staff WHERE id = ? LIMIT 1', [req.body.staff_id]);
+    if (!staff) throw notFound('কর্মী পাওয়া যায়নি');
+  }
+  const date = req.body.date || before.date;
+  const [year, month] = String(date).split('-').map(Number);
+  const method = req.body.method || before.method;
+  const notes = req.body.notes ?? before.notes;
+
+  const saved = await transaction(async (conn) => {
+    if (before.expense_id) {
+      await svc.update(getEntity('Expense'), before.expense_id, {
+        date, amount, method, notes, person: staff.name, description: `${staff.name} — অগ্রিম`,
+      }, conn).catch(() => null);
+    }
+    const row = await svc.update(StaffAdvance, before.id, {
+      staff_id: staff.id, staff_name: staff.name, date, year, month, amount, method, notes,
+    }, conn);
+    await orders.audit(conn, req.user, 'Staff advance updated', 'StaffAdvance', row.id,
+      { amount: before.amount }, { amount });
+    return row;
+  });
+  res.json(saved);
 });
 
 /** Removing an advance also removes the expense it booked. */
@@ -642,14 +836,14 @@ const priceCatalog = asyncH(async (_req, res) => {
 
 module.exports = {
   nextNumber, createOrder, updateOrder, orderDetail, updateOrderStatus,
-  createPayment, deletePayment,
+  createPayment, updatePayment, deletePayment, paymentReceipt,
   createCustomer, updateCustomer, customerDetail,
-  createPurchase, supplierDetail, createSupplierPayment, deleteSupplierPayment,
+  createPurchase, updatePurchase, supplierDetail, createSupplierPayment, deleteSupplierPayment,
   supplierDueList,
-  loanDetail, createLoanTxn,
+  loanDetail, createLoanTxn, updateLoanTxn, deleteLoanTxn, updateQuotation,
   createStockItem, adjustStock,
   nextQuote, createQuotation, convertQuotation,
   salarySheet, saveSalarySheet,
-  createStaffAdvance, deleteStaffAdvance, staffAdvanceReport,
+  createStaffAdvance, updateStaffAdvance, deleteStaffAdvance, staffAdvanceReport,
   priceCatalog, ADVANCE_CATEGORY,
 };

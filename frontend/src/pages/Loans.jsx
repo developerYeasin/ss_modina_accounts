@@ -51,6 +51,7 @@ export default function Loans() {
     <div>
       <PageHeader
         title="ধার হিসাব"
+        print
         subtitle={`${filtered.length} টি হিসাব`}
         actions={
           <Button size="sm" onClick={() => setEditing(blank)}>

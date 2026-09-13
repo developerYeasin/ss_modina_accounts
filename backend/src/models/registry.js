@@ -167,7 +167,49 @@ const registry = {
     table: 'stock_adjustments',
     sort: '-created_date',
     search: ['stock_name', 'reason'],
-    fields: { stock_id: S, stock_name: S, date: D, quantity: N, reason: S, notes: S },
+    fields: {
+      stock_id: S, stock_name: S, date: D, quantity: N, type: S, rate: N, amount: N,
+      payment_id: S, reason: S, notes: S,
+    },
+  },
+
+  OwnerTxn: {
+    table: 'owner_txns',
+    sort: '-date',
+    search: ['owner_name', 'notes'],
+    roles: { write: 'manager', delete: 'manager' },
+    fields: { date: D, flow: S, amount: N, method: S, owner_name: S, notes: S },
+  },
+
+  BankAccount: {
+    table: 'bank_accounts',
+    sort: 'name',
+    search: ['name', 'bank_name', 'account_no'],
+    roles: { write: 'manager', delete: 'admin' },
+    fields: {
+      name: S, bank_name: S, account_no: S, branch: S, opening_balance: N, notes: S, active: B,
+    },
+  },
+
+  BankTxn: {
+    table: 'bank_txns',
+    sort: '-date',
+    search: ['account_name', 'reference', 'notes'],
+    roles: { write: 'manager', delete: 'manager' },
+    fields: {
+      account_id: S, account_name: S, date: D, flow: S, amount: N, reference: S, notes: S,
+    },
+  },
+
+  BranchTransfer: {
+    table: 'branch_transfers',
+    sort: '-date',
+    search: ['from_branch_name', 'to_branch_name', 'sent_by', 'notes'],
+    roles: { write: 'user', delete: 'manager' },
+    fields: {
+      date: D, from_branch_id: S, from_branch_name: S, to_branch_id: S, to_branch_name: S,
+      items_json: J, total_amount: N, sent_by: S, notes: S,
+    },
   },
 
   AluminiumProfile: {

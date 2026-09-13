@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, ClipboardList, Users, CalendarDays, BarChart3, Receipt,
   ShoppingCart, Truck, HandCoins, Boxes, Tags, Wallet, FileText, Calculator,
-  Settings as SettingsIcon, UserCog, Search,
+  Settings as SettingsIcon, UserCog, Search, Crown, Landmark, ArrowLeftRight, Wallet2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSettings } from '@/hooks/useSettings';
@@ -18,9 +18,13 @@ export const MAIN_NAV = [
 ];
 
 export const MORE_NAV = [
+  { to: '/payments', label: 'জমা / পেমেন্ট', icon: Wallet2 },
   { to: '/expenses', label: 'খরচ', icon: Receipt },
   { to: '/purchases', label: 'ক্রয়', icon: ShoppingCart },
   { to: '/suppliers', label: 'সরবরাহকারী', icon: Truck },
+  { to: '/owner', label: 'মালিকের হিসাব', icon: Crown },
+  { to: '/bank', label: 'ব্যাংক', icon: Landmark },
+  { to: '/branch-transfers', label: 'শাখা ট্রান্সফার', icon: ArrowLeftRight },
   { to: '/loans', label: 'ধার হিসাব', icon: HandCoins },
   { to: '/stock', label: 'স্টক', icon: Boxes },
   { to: '/price-lists', label: 'মূল্য তালিকা', icon: Tags },

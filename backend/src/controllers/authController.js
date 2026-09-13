@@ -63,7 +63,20 @@ const me = asyncH(async (req, res) => {
 });
 
 const updateMe = asyncH(async (req, res) => {
-  const { full_name, phone, photo_url } = req.body || {};
+  const { full_name, phone, photo_url, email, current_password } = req.body || {};
+
+  // Login email change: confirmed with the current password, and must be free.
+  if (email && email !== req.user.email) {
+    const [me] = await query('SELECT password_hash FROM users WHERE id = ?', [req.user.id]);
+    if (!(await bcrypt.compare(current_password || '', me.password_hash))) {
+      throw unauthorized('ইমেইল বদলাতে বর্তমান পাসওয়ার্ড সঠিক দিন');
+    }
+    if (!/^\S+@\S+\.\S+$/.test(email)) throw badRequest('সঠিক ইমেইল দিন');
+    const taken = await query('SELECT id FROM users WHERE email = ? AND id <> ? LIMIT 1', [email, req.user.id]);
+    if (taken.length) throw conflict('এই ইমেইল আগে থেকেই ব্যবহৃত');
+    await query('UPDATE users SET email = ? WHERE id = ?', [email, req.user.id]);
+  }
+
   await query(
     'UPDATE users SET full_name = COALESCE(?, full_name), phone = ?, photo_url = ? WHERE id = ?',
     [full_name || null, phone ?? req.user.phone, photo_url ?? req.user.photo_url, req.user.id],

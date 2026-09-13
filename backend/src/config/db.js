@@ -10,6 +10,12 @@ const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
+  // The database is remote: keep sockets alive and drop idle ones before the
+  // server or a router silently resets them (ECONNRESET on the next query).
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 10000,
+  maxIdle: 2,
+  idleTimeout: 60000,
   charset: 'utf8mb4_unicode_ci',
   dateStrings: ['DATE'],
   timezone: 'Z',

@@ -51,6 +51,7 @@ export default function Expenses() {
     <div>
       <PageHeader
         title="খরচ"
+        print
         subtitle={`${filtered.length} টি এন্ট্রি`}
         actions={
           <>

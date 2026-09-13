@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Save, LogOut, KeyRound } from 'lucide-react';
+import { Save, LogOut, KeyRound, Mail } from 'lucide-react';
 import { Auth } from '@/api/entities';
 import {
   Button, Card, CardContent, CardHeader, CardTitle, Field, Input, PasswordInput, Badge,
@@ -19,6 +19,23 @@ export default function Profile() {
     photo_url: user.photo_url || '',
   });
   const [pw, setPw] = useState({ current_password: '', new_password: '', confirm: '' });
+  const [emailForm, setEmailForm] = useState({ email: user.email || '', current_password: '' });
+  const [emailBusy, setEmailBusy] = useState(false);
+
+  async function changeEmail(e) {
+    e.preventDefault();
+    setEmailBusy(true);
+    try {
+      await Auth.updateMe({ ...form, ...emailForm });
+      await refresh();
+      setEmailForm((f) => ({ ...f, current_password: '' }));
+      toast({ title: 'লগইন ইমেইল পরিবর্তন হয়েছে', description: 'এখন থেকে নতুন ইমেইল দিয়ে লগইন করবেন' });
+    } catch (err) {
+      toast({ title: 'পরিবর্তন করা যায়নি', description: err.message, variant: 'destructive' });
+    } finally {
+      setEmailBusy(false);
+    }
+  }
   const [busy, setBusy] = useState(false);
   const [pwBusy, setPwBusy] = useState(false);
 
@@ -101,6 +118,37 @@ export default function Profile() {
               <div className="sm:col-span-2">
                 <Button type="submit" loading={busy}>
                   <Save className="h-4 w-4" /> সংরক্ষণ করুন
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+
+        <Card className="lg:col-span-3">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Mail className="h-4 w-4" /> লগইন ইমেইল পরিবর্তন
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={changeEmail} className="grid gap-4 sm:grid-cols-3">
+              <Field label="নতুন ইমেইল" required hint="যে ইমেইল মনে থাকবে সেটি দিন">
+                <Input
+                  type="email" autoComplete="email" value={emailForm.email}
+                  onChange={(e) => setEmailForm({ ...emailForm, email: e.target.value })}
+                  required
+                />
+              </Field>
+              <Field label="বর্তমান পাসওয়ার্ড" required hint="নিশ্চিত করার জন্য">
+                <PasswordInput
+                  autoComplete="current-password" value={emailForm.current_password}
+                  onChange={(e) => setEmailForm({ ...emailForm, current_password: e.target.value })}
+                  required
+                />
+              </Field>
+              <div className="flex items-end">
+                <Button type="submit" loading={emailBusy} disabled={emailForm.email === user.email}>
+                  ইমেইল পরিবর্তন করুন
                 </Button>
               </div>
             </form>

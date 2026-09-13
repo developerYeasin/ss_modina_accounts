@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Phone, Download, Plus, Trash2, Printer } from 'lucide-react';
+import { Phone, Download, Plus, Trash2, Printer, Pencil } from 'lucide-react';
 import { Suppliers } from '@/api/entities';
 import {
   Button, Card, CardContent, CardHeader, CardTitle, Loading, ErrorState,
@@ -29,6 +29,7 @@ export default function SupplierDetail() {
   const [tab, setTab] = useState('ledger');
   const [payOpen, setPayOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [editPayment, setEditPayment] = useState(null);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['supplier-detail', id],
@@ -241,13 +242,18 @@ export default function SupplierDetail() {
                       </span>
                     ) },
                     { key: 'actions', label: '', align: 'right', render: (p) => (
-                      <Button
-                        variant="ghost" size="icon"
-                        onClick={() => setDeleteTarget(p)}
-                        aria-label="মুছুন"
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
+                      <span className="flex justify-end gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => setEditPayment(p)} aria-label="সংশোধন">
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost" size="icon"
+                          onClick={() => setDeleteTarget(p)}
+                          aria-label="মুছুন"
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </span>
                     ) },
                   ]}
                   rows={payments}
@@ -260,11 +266,12 @@ export default function SupplierDetail() {
       </div>
 
       <PaymentDialog
-        open={payOpen}
-        onClose={() => setPayOpen(false)}
+        open={payOpen || Boolean(editPayment)}
+        payment={editPayment}
+        onClose={() => { setPayOpen(false); setEditPayment(null); }}
         supplier={supplier}
         due={summary.due}
-        onSaved={() => { setPayOpen(false); refetch(); }}
+        onSaved={() => { setPayOpen(false); setEditPayment(null); refetch(); }}
       />
 
       <ConfirmDialog
@@ -283,13 +290,25 @@ export default function SupplierDetail() {
 }
 
 /** Pay against the running balance, not against one particular purchase. */
-function PaymentDialog({ open, onClose, supplier, due, onSaved }) {
+function PaymentDialog({ open, onClose, supplier, due, onSaved, payment }) {
   const { toast } = useToast();
   const { currency } = useSettings();
   const [form, setForm] = useState({
     date: isoDate(), amount: '', method: 'Cash', reference: '', notes: '',
   });
   const [busy, setBusy] = useState(false);
+  const isEdit = Boolean(payment?.id);
+
+  const key = open ? payment?.id || 'new' : null;
+  const [lastKey, setLastKey] = useState(null);
+  if (key !== lastKey) {
+    setLastKey(key);
+    if (open) {
+      setForm(isEdit
+        ? { date: payment.date, amount: payment.amount, method: payment.method || 'Cash', reference: payment.reference || '', notes: payment.notes || '' }
+        : { date: isoDate(), amount: '', method: 'Cash', reference: '', notes: '' });
+    }
+  }
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -300,9 +319,9 @@ function PaymentDialog({ open, onClose, supplier, due, onSaved }) {
     }
     setBusy(true);
     try {
-      await Suppliers.addPayment(supplier.id, form);
-      toast({ title: 'পরিশোধ সংরক্ষিত হয়েছে' });
-      setForm({ date: isoDate(), amount: '', method: 'Cash', reference: '', notes: '' });
+      if (isEdit) await Suppliers.updatePayment(payment.id, form);
+      else await Suppliers.addPayment(supplier.id, form);
+      toast({ title: isEdit ? 'পরিশোধ সংশোধন হয়েছে' : 'পরিশোধ সংরক্ষিত হয়েছে' });
       onSaved();
     } catch (err) {
       toast({ title: 'সংরক্ষণ করা যায়নি', description: err.message, variant: 'destructive' });
@@ -315,7 +334,7 @@ function PaymentDialog({ open, onClose, supplier, due, onSaved }) {
     <Dialog
       open={open}
       onClose={onClose}
-      title="সরবরাহকারীকে পরিশোধ"
+      title={isEdit ? 'পরিশোধ সংশোধন' : 'সরবরাহকারীকে পরিশোধ'}
       description={`${supplier.name} — বর্তমান বাকি ${money(due, currency)}`}
       footer={
         <>

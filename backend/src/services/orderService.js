@@ -169,7 +169,7 @@ async function createOrder(payload, user) {
         date: order.order_date,
         amount: num(payload.advance),
         method: payload.advance_method || 'Cash',
-        received_by: user.full_name,
+        received_by: payload.advance_received_by || user.full_name,
         notes: 'Advance with order',
       }, user.id, conn);
     }
@@ -242,6 +242,31 @@ async function createPayment(payload, user) {
   });
 }
 
+/** Correct a payment typed wrong; both the old and the new order are re-synced. */
+async function updatePayment(id, payload, user) {
+  const before = await svc.get(Payment, id);
+  if (payload.amount !== undefined && !num(payload.amount)) throw badRequest('পেমেন্টের পরিমাণ দিন');
+
+  return transaction(async (conn) => {
+    const data = { ...payload };
+    if (payload.order_id && payload.order_id !== before.order_id) {
+      const [o] = await query('SELECT * FROM orders WHERE id = ? LIMIT 1', [payload.order_id]);
+      if (!o) throw notFound('অর্ডার পাওয়া যায়নি');
+      Object.assign(data, {
+        order_number: o.order_number, customer_id: o.customer_id, customer_name: o.customer_name,
+      });
+    }
+    const payment = await svc.update(Payment, id, data, conn);
+    if (before.order_id) await syncOrderPaid(before.order_id, conn);
+    if (payment.order_id && payment.order_id !== before.order_id) {
+      await syncOrderPaid(payment.order_id, conn);
+    }
+    await audit(conn, user, 'Payment updated', 'Payment', id,
+      { amount: before.amount, date: before.date }, { amount: payment.amount, date: payment.date });
+    return payment;
+  });
+}
+
 async function deletePayment(id, user) {
   const payment = await svc.get(Payment, id);
   return transaction(async (conn) => {
@@ -273,5 +298,5 @@ async function audit(conn, user, action, recordType, recordId, oldValue, newValu
 
 module.exports = {
   computeTotals, lineAmount, nextOrderNumber, nextQuoteNumber, nextCustomerCode,
-  createOrder, updateOrder, createPayment, deletePayment, syncOrderPaid, audit,
+  createOrder, updateOrder, createPayment, updatePayment, deletePayment, syncOrderPaid, audit,
 };

@@ -55,6 +55,8 @@ router.patch('/orders/:id', domain.updateOrder);
 router.patch('/orders/:id/status', domain.updateOrderStatus);
 
 router.post('/payments', domain.createPayment);
+router.get('/payments/:id/receipt', domain.paymentReceipt);
+router.patch('/payments/:id', domain.updatePayment);
 router.delete('/payments/:id', domain.deletePayment);
 
 router.post('/customers', domain.createCustomer);
@@ -62,6 +64,7 @@ router.patch('/customers/:id', domain.updateCustomer);
 router.get('/customers/:id/detail', domain.customerDetail);
 
 router.post('/purchases', domain.createPurchase);
+router.patch('/purchases/:id', domain.updatePurchase);
 router.get('/suppliers/due', domain.supplierDueList);
 router.get('/suppliers/:id/detail', domain.supplierDetail);
 router.post('/suppliers/:id/payments', domain.createSupplierPayment);
@@ -69,18 +72,22 @@ router.delete('/suppliers/:id/payments/:paymentId', domain.deleteSupplierPayment
 
 router.get('/loans/:id/detail', domain.loanDetail);
 router.post('/loans/:id/txns', domain.createLoanTxn);
+router.patch('/loans/:id/txns/:txnId', domain.updateLoanTxn);
+router.delete('/loans/:id/txns/:txnId', domain.deleteLoanTxn);
 
 router.post('/stock', domain.createStockItem);
 router.post('/stock/:id/adjust', domain.adjustStock);
 
 router.get('/quotations/next-number', domain.nextQuote);
 router.post('/quotations', domain.createQuotation);
+router.patch('/quotations/:id', domain.updateQuotation);
 router.post('/quotations/:id/convert', domain.convertQuotation);
 
 router.get('/salary/sheet', domain.salarySheet);
 router.post('/salary/sheet', requireRole('manager'), domain.saveSalarySheet);
 router.get('/salary/advances', domain.staffAdvanceReport);
 router.post('/salary/advances', requireRole('manager'), domain.createStaffAdvance);
+router.patch('/salary/advances/:id', requireRole('manager'), domain.updateStaffAdvance);
 router.delete('/salary/advances/:id', requireRole('manager'), domain.deleteStaffAdvance);
 
 router.get('/price-catalog', domain.priceCatalog);
