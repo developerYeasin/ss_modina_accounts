@@ -16,9 +16,10 @@ import { useSettings } from '@/hooks/useSettings';
 const QUICK_ACTIONS = [
   { to: '/customers/new', label: 'নতুন কাস্টমার', icon: UserPlus },
   { to: '/orders/new', label: 'নতুন অর্ডার', icon: FilePlus2 },
+  { to: '/sales', label: 'বিক্রয়', icon: TrendingUp },
+  { to: '/dues', label: 'বাকি খাতা', icon: HandCoins },
   { to: '/accounts', label: 'দৈনিক হিসাব', icon: CalendarDays },
   { to: '/orders', label: 'অর্ডার দেখুন', icon: ClipboardList },
-  { to: '/reports?tab=due', label: 'বাকি দেখুন', icon: HandCoins },
   { to: '/reports', label: 'রিপোর্ট', icon: BarChart3 },
 ];
 
@@ -49,12 +50,16 @@ export default function Dashboard() {
         <StatCard label="আজকের বিক্রি" value={today.sales} icon={TrendingUp} tone="primary" currency={currency} />
         <StatCard label="আজকের পেমেন্ট" value={today.payments} icon={Wallet} tone="success" currency={currency} />
         <StatCard label="আজকের খরচ" value={today.expenses} icon={Receipt} tone="danger" currency={currency} />
-        <StatCard label="মোট বাকি" value={totals.due} icon={AlertCircle} tone="accent" currency={currency} to="/reports?tab=due" />
+        <StatCard label="মোট বাকি" value={totals.due} icon={AlertCircle} tone="accent" currency={currency} to="/dues" />
       </div>
 
-      <SectionTitle>এই মাসের সারসংক্ষেপ</SectionTitle>
+      <SectionTitle
+        action={<Link to="/sales" className="text-sm font-medium text-primary underline-offset-2 hover:underline">মাসভিত্তিক বিক্রয় →</Link>}
+      >
+        এই মাসের সারসংক্ষেপ
+      </SectionTitle>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-        <StatCard label="মাসিক বিক্রি" value={month.sales} icon={TrendingUp} tone="primary" currency={currency} />
+        <StatCard label="মাসিক বিক্রি" value={month.sales} icon={TrendingUp} tone="primary" currency={currency} to="/sales" />
         <StatCard label="মাসিক খরচ" value={month.expenses} icon={Receipt} tone="danger" currency={currency} />
         <StatCard label="মাসিক আদায়" value={month.payments} icon={Wallet} tone="success" currency={currency} />
       </div>
@@ -98,10 +103,10 @@ export default function Dashboard() {
       )}
 
       <SectionTitle>কুইক অ্যাকশন</SectionTitle>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
         {QUICK_ACTIONS.map(({ to, label, icon: Icon }) => (
           <Link key={to + label} to={to}>
-            <Card className="flex flex-col items-center gap-2 p-4 text-center transition-shadow hover:shadow-md">
+            <Card className="flex flex-col items-center gap-2 p-4 text-center transition-shadow">
               <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
                 <Icon className="h-5 w-5" />
               </span>

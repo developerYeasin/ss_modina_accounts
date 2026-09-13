@@ -34,8 +34,6 @@ const PaymentForm = lazy(() => import('@/pages/PaymentForm'));
 const Quotations = lazy(() => import('@/pages/Quotations'));
 const QuotationForm = lazy(() => import('@/pages/QuotationForm'));
 const QuotationInvoice = lazy(() => import('@/pages/QuotationInvoice'));
-const Calculators = lazy(() => import('@/pages/Calculators'));
-const GlobalSearch = lazy(() => import('@/pages/GlobalSearch'));
 const SettingsPage = lazy(() => import('@/pages/Settings'));
 const Profile = lazy(() => import('@/pages/Profile'));
 const UsersPage = lazy(() => import('@/pages/Users'));
@@ -44,6 +42,10 @@ const PaymentReceipt = lazy(() => import('@/pages/PaymentReceipt'));
 const OwnerAccount = lazy(() => import('@/pages/OwnerAccount'));
 const BankPage = lazy(() => import('@/pages/Bank'));
 const BranchTransfers = lazy(() => import('@/pages/BranchTransfers'));
+const Sales = lazy(() => import('@/pages/Sales'));
+const Dues = lazy(() => import('@/pages/Dues'));
+const Parties = lazy(() => import('@/pages/Parties'));
+const PartyDetail = lazy(() => import('@/pages/PartyDetail'));
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -113,16 +115,16 @@ export default function App() {
             <Route path="owner" element={<OwnerAccount />} />
             <Route path="bank" element={<BankPage />} />
             <Route path="branch-transfers" element={<BranchTransfers />} />
+            <Route path="sales" element={<Sales />} />
+            <Route path="dues" element={<Dues />} />
+            <Route path="parties" element={<Parties />} />
+            <Route path="parties/:id" element={<PartyDetail />} />
 
             <Route path="quotations" element={<Quotations />} />
             <Route path="quotations/new" element={<QuotationForm />} />
             <Route path="quotations/:id/edit" element={<QuotationForm />} />
             <Route path="quotations/:id/invoice" element={<QuotationInvoice />} />
 
-            <Route path="materials" element={<Calculators />} />
-            <Route path="calculator/:kind" element={<Calculators />} />
-
-            <Route path="search" element={<GlobalSearch />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="settings/profile" element={<Profile />} />
             <Route path="users" element={<UsersPage />} />

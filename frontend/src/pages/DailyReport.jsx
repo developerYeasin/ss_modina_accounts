@@ -35,9 +35,19 @@ function cashLines(data) {
       id: `l-${t.id}`, head: t.loan_type === 'Borrowed' ? 'ধার নেওয়া' : 'ধার ফেরত পেলাম',
       label: t.person_name, detail: t.notes, amount: num(t.amount), to: `/loans/${t.loan_id}`,
     })),
+    ...(data.party_txns || []).filter((t) => t.type === 'receive_cash' || (t.type === 'give_goods' && num(t.cash_amount) > 0)).map((t) => ({
+      id: `pt-${t.id}`, head: t.type === 'receive_cash' ? 'পার্টি টাকা দিল' : 'পার্টিকে মাল — নগদ',
+      label: t.party_name, detail: t.description,
+      amount: num(t.type === 'receive_cash' ? t.amount : t.cash_amount), to: `/parties/${t.party_id}`,
+    })),
   ];
 
   const expense = [
+    ...(data.party_txns || []).filter((t) => t.type === 'pay_cash' || (t.type === 'take_goods' && num(t.cash_amount) > 0)).map((t) => ({
+      id: `pt-${t.id}`, head: t.type === 'pay_cash' ? 'পার্টিকে টাকা দিলাম' : 'পার্টি থেকে মাল — নগদ',
+      label: t.party_name, detail: t.description,
+      amount: num(t.type === 'pay_cash' ? t.amount : t.cash_amount), to: `/parties/${t.party_id}`,
+    })),
     ...data.expenses.map((x) => ({
       id: `e-${x.id}`, head: x.category, label: x.description || x.category,
       detail: x.person, amount: num(x.amount), to: `/expenses/${x.id}/edit`,

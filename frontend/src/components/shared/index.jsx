@@ -43,10 +43,12 @@ const TONES = {
 /** The metric tiles used on the dashboard and report screens. */
 export function StatCard({ label, value, icon: Icon, tone = 'primary', hint, to, currency }) {
   const body = (
-    <Card className={cn('p-4 transition-shadow', to && 'hover:shadow-md')}>
+    <Card className={cn('p-4 transition-shadow', to && 'cursor-pointer border-primary/30')}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-sm text-muted-foreground">{label}</p>
+          <p className="truncate text-sm text-muted-foreground">
+            {label}{to && <span className="ml-1 font-medium text-primary">→</span>}
+          </p>
           <p className="num mt-1 font-heading text-xl font-bold sm:text-2xl">
             {currency === false ? value : money(value, currency || '৳')}
           </p>
@@ -193,6 +195,7 @@ export { EmptyState, Loading, ErrorState } from '@/components/ui';
 export { PrintDoc, PrintTable, PrintTotals } from './PrintDoc';
 export { StaffSelect } from './StaffSelect';
 export { PaymentDialog } from './PaymentDialog';
+export { CategorySelect } from './CategorySelect';
 
 /** প্রিন্ট button for list screens — the page itself is the paper. */
 export const PrintButton = ({ label = 'প্রিন্ট' }) => (

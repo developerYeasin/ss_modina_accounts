@@ -51,6 +51,19 @@ export const OwnerTxn = entityClient('OwnerTxn');
 export const BankAccount = entityClient('BankAccount');
 export const BankTxn = entityClient('BankTxn');
 export const BranchTransfer = entityClient('BranchTransfer');
+export const Party = entityClient('Party');
+export const PartyTxn = entityClient('PartyTxn');
+
+export const ExpenseCategories = {
+  add: (name) => api.post('/settings/expense-categories', { action: 'add', name }),
+  rename: (from, to) => api.post('/settings/expense-categories', { action: 'rename', from, to }),
+  remove: (name) => api.post('/settings/expense-categories', { action: 'remove', name }),
+};
+
+export const Parties = {
+  summary: () => api.get('/parties/summary'),
+  detail: (id) => api.get(`/parties/${id}/detail`),
+};
 
 /** Endpoints that carry business rules, so the UI never recomputes them. */
 export const Auth = {
@@ -136,6 +149,8 @@ export const Reports = {
   daily: (date) => api.get(`/reports/daily${toQuery({ date })}`),
   range: (params) => api.get(`/reports/range${toQuery(params)}`),
   due: () => api.get('/reports/due'),
+  dueLedger: (params) => api.get(`/reports/due-ledger${toQuery(params)}`),
+  sales: (params) => api.get(`/reports/sales${toQuery(params)}`),
   expenseMonthly: (params) => api.get(`/reports/expense-monthly${toQuery(params)}`),
   expenseCategory: (params) => api.get(`/reports/expense-category${toQuery(params)}`),
 };

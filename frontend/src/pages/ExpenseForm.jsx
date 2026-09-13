@@ -7,7 +7,7 @@ import {
   Button, Card, CardContent, Field, Input, Select, Textarea, Loading,
 } from '@/components/ui';
 import { useToast } from '@/components/ui/toast';
-import { PageHeader, PAYMENT_METHODS } from '@/components/shared';
+import { PageHeader, PAYMENT_METHODS, CategorySelect } from '@/components/shared';
 import { isoDate, num } from '@/lib/utils';
 import { useSettings } from '@/hooks/useSettings';
 
@@ -49,6 +49,10 @@ export default function ExpenseForm() {
       toast({ title: 'পরিমাণ দিন', variant: 'destructive' });
       return;
     }
+    if (!form.category) {
+      toast({ title: 'খাত নির্বাচন করুন', variant: 'destructive' });
+      return;
+    }
     setBusy(true);
     try {
       const payload = { ...form };
@@ -87,13 +91,8 @@ export default function ExpenseForm() {
             />
           </Field>
 
-          <Field label="খাত" required>
-            <Select value={form.category} onChange={(e) => set('category', e.target.value)} required>
-              <option value="">নির্বাচন করুন</option>
-              {expenseCategories.map((c) => <option key={c} value={c}>{c}</option>)}
-              <option value="Labour">Labour</option>
-              <option value="Other">Other</option>
-            </Select>
+          <Field label="খাত" required hint="➕ নতুন খাত যোগ · ✏️ নাম ঠিক করুন">
+            <CategorySelect value={form.category} onChange={(v) => set('category', v)} />
           </Field>
 
           <Field label="মাধ্যম">

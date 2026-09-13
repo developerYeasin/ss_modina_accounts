@@ -201,6 +201,25 @@ const registry = {
     },
   },
 
+  Party: {
+    table: 'parties',
+    sort: 'name',
+    search: ['name', 'shop_name', 'mobile'],
+    fields: {
+      name: S, shop_name: S, mobile: S, address: S, opening_balance: N, notes: S,
+    },
+  },
+
+  PartyTxn: {
+    table: 'party_txns',
+    sort: '-date',
+    search: ['party_name', 'description', 'notes'],
+    fields: {
+      party_id: S, party_name: S, date: D, type: S, description: S, amount: N,
+      cash_amount: N, method: S, notes: S,
+    },
+  },
+
   BranchTransfer: {
     table: 'branch_transfers',
     sort: '-date',

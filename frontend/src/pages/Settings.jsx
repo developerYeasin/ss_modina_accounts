@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Save, Plus, Trash2, X, Pencil } from 'lucide-react';
-import { Setting, Branch, AuditLog } from '@/api/entities';
+import { Setting, Branch, AuditLog, ExpenseCategories } from '@/api/entities';
 import {
   Button, Card, CardContent, CardHeader, CardTitle, Field, Input, Select,
   Textarea, Loading, Tabs, Badge, Dialog, ConfirmDialog, Checkbox,
@@ -25,7 +25,7 @@ export default function SettingsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const [tab, setTab] = useState('business');
+  const [tab, setTab] = useState(() => new URLSearchParams(window.location.search).get('tab') || 'business');
   const [form, setForm] = useState(setting);
   const [categories, setCategories] = useState([]);
   const [newCategory, setNewCategory] = useState('');
@@ -222,22 +222,43 @@ export default function SettingsPage() {
             {categories.length === 0 ? (
               <p className="text-sm text-muted-foreground">কোনো খাত যোগ করা হয়নি।</p>
             ) : (
-              <div className="flex flex-wrap gap-2">
+              <div className="divide-y rounded-lg border border-slate-200">
                 {categories.map((c, i) => (
-                  <Badge key={`${c}-${i}`} variant="secondary" className="gap-1.5 py-1 pl-3 pr-1.5">
-                    {c}
-                    <button
-                      type="button"
-                      onClick={() => saveCategories(categories.filter((_, x) => x !== i))}
-                      className="rounded-full p-0.5 hover:bg-destructive/20"
-                      aria-label="মুছুন"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
+                  <div key={`${c}-${i}`} className="flex items-center justify-between gap-2 px-3 py-2">
+                    <span className="font-medium">{c}</span>
+                    <span className="flex gap-1">
+                      <Button
+                        variant="outline" size="sm"
+                        onClick={async () => {
+                          const to = window.prompt('খাতের নতুন নাম লিখুন', c);
+                          if (!to || to.trim() === c) return;
+                          try {
+                            const r = await ExpenseCategories.rename(c, to.trim());
+                            setCategories(r.categories);
+                            refetchSettings();
+                            queryClient.invalidateQueries({ queryKey: ['expenses'] });
+                            toast({ title: 'নাম ঠিক হয়েছে', description: r.renamed ? `${r.renamed} টি পুরনো খরচও নতুন নামে গেছে` : undefined });
+                          } catch (err) {
+                            toast({ title: 'পরিবর্তন করা যায়নি', description: err.message, variant: 'destructive' });
+                          }
+                        }}
+                      >
+                        <Pencil className="h-3.5 w-3.5" /> নাম ঠিক করুন
+                      </Button>
+                      <Button
+                        variant="ghost" size="icon" aria-label="মুছুন"
+                        onClick={() => saveCategories(categories.filter((_, x) => x !== i))}
+                      >
+                        <X className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </span>
+                  </div>
                 ))}
               </div>
             )}
+            <p className="text-xs text-muted-foreground">
+              খাতের নাম ঠিক করলে আগের সব খরচও নতুন নামে চলে যায়। খাত মুছলে পুরনো খরচ মুছে না।
+            </p>
           </CardContent>
         </Card>
       )}

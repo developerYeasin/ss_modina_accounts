@@ -5,14 +5,19 @@ import { cn } from '@/lib/utils';
 
 /* ------------------------------- Button ------------------------------- */
 
+/*
+ * Every clickable thing must look clickable: filled buttons carry a shadow,
+ * outline buttons a coloured border and text, ghost icons a tinted hover —
+ * and none of them fade to white when pressed.
+ */
 const BUTTON_VARIANTS = {
-  default: 'bg-primary text-primary-foreground hover:bg-primary/90',
-  accent: 'bg-accent text-accent-foreground hover:bg-accent/90',
-  outline: 'border border-white/60 bg-white/70 hover:bg-white/90',
-  ghost: 'hover:bg-muted',
-  secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
-  destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
-  link: 'text-primary underline-offset-4 hover:underline',
+  default: 'bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 active:bg-primary/80',
+  accent: 'bg-accent text-accent-foreground shadow-sm hover:bg-accent/90 active:bg-accent/80',
+  outline: 'border border-primary/40 bg-white text-primary shadow-sm hover:border-primary hover:bg-primary/10 active:bg-primary/15',
+  ghost: 'text-slate-600 hover:bg-primary/10 hover:text-primary active:bg-primary/15',
+  secondary: 'border border-slate-300 bg-slate-100 text-slate-800 hover:bg-slate-200 active:bg-slate-300',
+  destructive: 'bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90 active:bg-destructive/80',
+  link: 'text-primary underline underline-offset-4 hover:text-primary/80',
 };
 
 const BUTTON_SIZES = {
@@ -68,9 +73,9 @@ export const CardFooter = ({ className, ...props }) => (
 /* ------------------------------- Inputs ------------------------------- */
 
 const fieldClass =
-  'flex h-10 w-full rounded-md border border-white/60 bg-white/70 px-3 py-2 text-sm ' +
-  'placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 ' +
-  'focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
+  'flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-foreground ' +
+  'placeholder:text-slate-400 hover:border-slate-400 focus-visible:border-primary focus-visible:outline-none ' +
+  'focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:opacity-70';
 
 export const Input = forwardRef(function Input({ className, ...props }, ref) {
   return <input ref={ref} className={cn(fieldClass, className)} {...props} />;
@@ -146,7 +151,7 @@ export function Checkbox({ checked, onChange, label, className, ...props }) {
       <span
         className={cn(
           'flex h-5 w-5 items-center justify-center rounded border transition-colors',
-          checked ? 'border-primary bg-primary text-primary-foreground' : 'border-white/60 bg-white/70',
+          checked ? 'border-primary bg-primary text-primary-foreground' : 'border-slate-400 bg-white',
         )}
       >
         {checked && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
@@ -208,11 +213,11 @@ export function Dialog({ open, onClose, title, description, children, footer, si
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div
         className={cn(
-          'glass relative z-10 flex max-h-[92vh] w-full flex-col rounded-t-2xl shadow-xl sm:rounded-2xl',
+          'relative z-10 flex max-h-[92vh] w-full flex-col rounded-t-2xl border border-slate-200 bg-white shadow-2xl sm:rounded-2xl',
           widths[size],
         )}
       >
-        <div className="flex items-start justify-between gap-4 border-b p-4">
+        <div className="flex items-start justify-between gap-4 rounded-t-2xl border-b border-slate-200 bg-primary/5 p-4">
           <div>
             <h2 className="font-heading text-lg font-semibold">{title}</h2>
             {description && <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>}
@@ -262,7 +267,7 @@ export function ConfirmDialog({ open, onClose, onConfirm, title, message, confir
 
 export function Tabs({ tabs, value, onChange, className }) {
   return (
-    <div className={cn('flex gap-1 overflow-x-auto rounded-xl bg-white/50 p-1 backdrop-blur', className)}>
+    <div className={cn('flex gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1 shadow-sm', className)}>
       {tabs.map((t) => (
         <button
           key={t.value}
@@ -271,8 +276,8 @@ export function Tabs({ tabs, value, onChange, className }) {
           className={cn(
             'whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
             value === t.value
-              ? 'bg-white/90 text-foreground shadow-sm'
-              : 'text-muted-foreground hover:text-foreground',
+              ? 'bg-primary text-primary-foreground shadow-sm'
+              : 'text-slate-600 hover:bg-primary/10 hover:text-primary',
           )}
         >
           {t.label}

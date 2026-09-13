@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Trash2, Save, Calculator } from 'lucide-react';
+import { Plus, Trash2, Save } from 'lucide-react';
 import { Customer, Customers, Orders, Order } from '@/api/entities';
 import {
   Button, Card, CardContent, CardHeader, CardTitle, Field, Input, Select, Textarea,
@@ -147,11 +147,6 @@ export default function OrderForm() {
         title={isEdit ? 'অর্ডার সম্পাদনা' : 'নতুন অর্ডার'}
         subtitle={form.order_number}
         back="/orders"
-        actions={
-          <Button variant="outline" size="sm" onClick={() => navigate('/materials')}>
-            <Calculator className="h-4 w-4" /> ক্যালকুলেটর
-          </Button>
-        }
       />
 
       <div className="grid gap-4 lg:grid-cols-3">

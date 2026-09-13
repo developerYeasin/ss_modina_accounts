@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Receipt, Download, Trash2 } from 'lucide-react';
+import { Plus, Receipt, Download, Trash2, Pencil } from 'lucide-react';
 import { Expense } from '@/api/entities';
 import {
   Button, Loading, ErrorState, EmptyState, Select, Input, ConfirmDialog,
@@ -67,6 +67,9 @@ export default function Expenses() {
               ])}
             >
               <Download className="h-4 w-4" /> CSV
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => navigate('/settings?tab=categories')}>
+              <Pencil className="h-4 w-4" /> খরচের খাত যোগ / সম্পাদনা
             </Button>
             <Button size="sm" onClick={() => navigate('/expenses/new')}>
               <Plus className="h-4 w-4" /> নতুন খরচ

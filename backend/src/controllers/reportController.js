@@ -91,13 +91,19 @@ async function cashFlow(op, day) {
                           OR (l.type = 'Lent' AND t.flow <> 'increase'))) AS loan_in,
          (SELECT COALESCE(SUM(t.amount),0) FROM loan_txns t JOIN loans l ON l.id = t.loan_id
            WHERE t.${w} AND ((l.type = 'Lent' AND t.flow = 'increase')
-                          OR (l.type = 'Borrowed' AND t.flow <> 'increase'))) AS loan_out`,
-    Array(11).fill(day),
+                          OR (l.type = 'Borrowed' AND t.flow <> 'increase'))) AS loan_out,
+         (SELECT COALESCE(SUM(CASE WHEN type = 'receive_cash' THEN amount
+                                   WHEN type = 'give_goods' THEN cash_amount ELSE 0 END),0)
+            FROM party_txns WHERE ${w}) AS party_in,
+         (SELECT COALESCE(SUM(CASE WHEN type = 'pay_cash' THEN amount
+                                   WHEN type = 'take_goods' THEN cash_amount ELSE 0 END),0)
+            FROM party_txns WHERE ${w}) AS party_out`,
+    Array(13).fill(day),
   );
   const v = Object.fromEntries(Object.entries(r).map(([k, x]) => [k, Number(x)]));
-  v.cash_in = v.collected + v.owner_invest + v.bank_withdraw + v.loan_in;
+  v.cash_in = v.collected + v.owner_invest + v.bank_withdraw + v.loan_in + v.party_in;
   v.cash_out = v.expenses + v.purchase_paid + v.supplier_paid + v.owner_withdraw
-    + v.bank_deposit + v.loan_out;
+    + v.bank_deposit + v.loan_out + v.party_out;
   v.net = v.cash_in - v.cash_out;
   return v;
 }
@@ -107,7 +113,7 @@ const daily = asyncH(async (req, res) => {
   const day = req.query.date || today();
   const [
     orders, payments, expenses, purchases, supplierPayments, ownerTxns, bankTxns, loanTxns,
-    flow, before,
+    partyTxns, flow, before,
   ] = await Promise.all([
     query('SELECT * FROM orders WHERE order_date = ? AND archived = 0 ORDER BY created_date DESC', [day]),
     query('SELECT * FROM payments WHERE date = ? AND archived = 0 ORDER BY created_date DESC', [day]),
@@ -118,6 +124,7 @@ const daily = asyncH(async (req, res) => {
     query('SELECT * FROM bank_txns WHERE date = ? ORDER BY created_date DESC', [day]),
     query(`SELECT t.*, l.type AS loan_type FROM loan_txns t JOIN loans l ON l.id = t.loan_id
             WHERE t.date = ? ORDER BY t.created_date DESC`, [day]),
+    query('SELECT * FROM party_txns WHERE date = ? ORDER BY created_date DESC', [day]),
     cashFlow('=', day),
     // গতকালের জের: every earlier day's cash in minus cash out.
     cashFlow('<', day),
@@ -131,6 +138,7 @@ const daily = asyncH(async (req, res) => {
     owner_txns: ownerTxns,
     bank_txns: bankTxns,
     loan_txns: loanTxns,
+    party_txns: partyTxns,
     summary: {
       sales: sum(orders, 'total_selling'),
       new_due: sum(orders, 'due'),
@@ -346,6 +354,173 @@ const expenseByCategory = asyncH(async (req, res) => {
   });
 });
 
+/**
+ * GET /api/reports/sales?year=&month=
+ *
+ * বিক্রয় — every month of the year: memo sales (orders), stock sold over the
+ * counter, and what was collected; with ?month= also the day-by-day list.
+ */
+const sales = asyncH(async (req, res) => {
+  const year = Number(req.query.year) || new Date().getFullYear();
+  const month = Number(req.query.month) || null;
+
+  const [orderRows, payRows, stockRows] = await Promise.all([
+    query(`SELECT MONTH(order_date) AS m, COUNT(*) AS orders,
+                  COALESCE(SUM(total_selling),0) AS sales, COALESCE(SUM(due),0) AS due
+             FROM orders WHERE archived = 0 AND YEAR(order_date) = ? GROUP BY m`, [year]),
+    query(`SELECT MONTH(date) AS m, COALESCE(SUM(amount),0) AS collected,
+                  COALESCE(SUM(CASE WHEN method = 'Cash' THEN amount ELSE 0 END),0) AS cash
+             FROM payments WHERE archived = 0 AND YEAR(date) = ? GROUP BY m`, [year]),
+    query(`SELECT MONTH(date) AS m, COALESCE(SUM(amount),0) AS stock_sales, COUNT(*) AS entries
+             FROM stock_adjustments WHERE type = 'sale' AND YEAR(date) = ? GROUP BY m`, [year]),
+  ]);
+
+  const pick = (rows, m) => rows.find((r) => Number(r.m) === m) || {};
+  const months = Array.from({ length: 12 }, (_, i) => {
+    const m = i + 1;
+    const o = pick(orderRows, m);
+    const p = pick(payRows, m);
+    const s = pick(stockRows, m);
+    const orderSales = Number(o.sales || 0);
+    const stockSales = Number(s.stock_sales || 0);
+    return {
+      month: m,
+      orders: Number(o.orders || 0),
+      order_sales: orderSales,
+      stock_sales: stockSales,
+      total_sales: orderSales + stockSales,
+      due: Number(o.due || 0),
+      collected: Number(p.collected || 0),
+      cash: Number(p.cash || 0),
+    };
+  });
+
+  let days = [];
+  if (month) {
+    const [od, pd, sd] = await Promise.all([
+      query(`SELECT order_date AS d, COUNT(*) AS orders, COALESCE(SUM(total_selling),0) AS sales,
+                    COALESCE(SUM(due),0) AS due
+               FROM orders WHERE archived = 0 AND YEAR(order_date) = ? AND MONTH(order_date) = ?
+              GROUP BY order_date`, [year, month]),
+      query(`SELECT date AS d, COALESCE(SUM(amount),0) AS collected,
+                    COALESCE(SUM(CASE WHEN method = 'Cash' THEN amount ELSE 0 END),0) AS cash
+               FROM payments WHERE archived = 0 AND YEAR(date) = ? AND MONTH(date) = ?
+              GROUP BY date`, [year, month]),
+      query(`SELECT date AS d, COALESCE(SUM(amount),0) AS stock_sales
+               FROM stock_adjustments WHERE type = 'sale' AND YEAR(date) = ? AND MONTH(date) = ?
+              GROUP BY date`, [year, month]),
+    ]);
+    const dates = [...new Set([...od, ...pd, ...sd].map((r) => String(r.d)))].sort().reverse();
+    days = dates.map((d) => {
+      const o = od.find((r) => String(r.d) === d) || {};
+      const p = pd.find((r) => String(r.d) === d) || {};
+      const s = sd.find((r) => String(r.d) === d) || {};
+      const orderSales = Number(o.sales || 0);
+      const stockSales = Number(s.stock_sales || 0);
+      return {
+        date: d,
+        orders: Number(o.orders || 0),
+        order_sales: orderSales,
+        stock_sales: stockSales,
+        total_sales: orderSales + stockSales,
+        due: Number(o.due || 0),
+        collected: Number(p.collected || 0),
+        cash: Number(p.cash || 0),
+      };
+    });
+  }
+
+  const total = (k) => months.reduce((a, r) => a + r[k], 0);
+  res.json({
+    year,
+    month,
+    months,
+    days,
+    totals: {
+      orders: total('orders'),
+      order_sales: total('order_sales'),
+      stock_sales: total('stock_sales'),
+      total_sales: total('total_sales'),
+      due: total('due'),
+      collected: total('collected'),
+      cash: total('cash'),
+    },
+  });
+});
+
+/**
+ * GET /api/reports/due-ledger?from=&to=
+ *
+ * বাকি খাতা — every customer's running due (পূর্বের বাকি + সব বিল − সব জমা),
+ * plus how much was billed, paid and newly left unpaid in the chosen period
+ * (this month by default).
+ */
+const dueLedger = asyncH(async (req, res) => {
+  const from = req.query.from || monthStart();
+  const to = req.query.to || today();
+
+  const rows = await query(
+    `SELECT c.id, c.customer_id AS code, c.name, c.mobile, c.village, c.branch_name,
+            c.opening_due,
+            COALESCE(o.billed,0) AS billed, COALESCE(o.orders,0) AS orders, o.last_order,
+            COALESCE(p.paid,0) AS paid, p.last_payment,
+            COALESCE(om.billed,0) AS period_billed, COALESCE(om.due,0) AS period_order_due,
+            COALESCE(pm.paid,0) AS period_paid
+       FROM customers c
+       LEFT JOIN (SELECT customer_id, SUM(total_selling) AS billed, COUNT(*) AS orders,
+                         MAX(order_date) AS last_order
+                    FROM orders WHERE archived = 0 GROUP BY customer_id) o ON o.customer_id = c.id
+       LEFT JOIN (SELECT customer_id, SUM(amount) AS paid, MAX(date) AS last_payment
+                    FROM payments WHERE archived = 0 GROUP BY customer_id) p ON p.customer_id = c.id
+       LEFT JOIN (SELECT customer_id, SUM(total_selling) AS billed, SUM(due) AS due
+                    FROM orders WHERE archived = 0 AND order_date BETWEEN ? AND ?
+                   GROUP BY customer_id) om ON om.customer_id = c.id
+       LEFT JOIN (SELECT customer_id, SUM(amount) AS paid
+                    FROM payments WHERE archived = 0 AND date BETWEEN ? AND ?
+                   GROUP BY customer_id) pm ON pm.customer_id = c.id`,
+    [from, to, from, to],
+  );
+
+  const list = rows.map((r) => {
+    const n = (k) => Number(r[k] || 0);
+    return {
+      id: r.id,
+      code: r.code,
+      name: r.name,
+      mobile: r.mobile,
+      village: r.village,
+      branch_name: r.branch_name,
+      orders: n('orders'),
+      opening_due: n('opening_due'),
+      billed: n('billed'),
+      paid: n('paid'),
+      due: Math.round((n('opening_due') + n('billed') - n('paid')) * 100) / 100,
+      last_order: r.last_order,
+      last_payment: r.last_payment,
+      period_billed: n('period_billed'),
+      period_paid: n('period_paid'),
+      period_order_due: n('period_order_due'),
+    };
+  }).filter((r) => r.due !== 0 || r.period_billed || r.period_paid)
+    .sort((a, b) => b.due - a.due);
+
+  const sum = (k, rowsIn = list) => rowsIn.reduce((a, r) => a + r[k], 0);
+  const owing = list.filter((r) => r.due > 0);
+  res.json({
+    from,
+    to,
+    rows: list,
+    totals: {
+      due: sum('due', owing),
+      advance: -sum('due', list.filter((r) => r.due < 0)),
+      customers_owing: owing.length,
+      period_billed: sum('period_billed'),
+      period_paid: sum('period_paid'),
+      period_order_due: sum('period_order_due'),
+    },
+  });
+});
+
 /** GET /api/reports/search?q= — the global search screen. */
 const globalSearch = asyncH(async (req, res) => {
   const q = `%${String(req.query.q || '').trim()}%`;
@@ -363,6 +538,6 @@ const globalSearch = asyncH(async (req, res) => {
 });
 
 module.exports = {
-  dashboard, daily, range, dueList, customerStatement, globalSearch,
+  dashboard, daily, range, dueList, customerStatement, globalSearch, sales, dueLedger,
   expenseMonthly, expenseByCategory,
 };

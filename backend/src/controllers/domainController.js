@@ -431,6 +431,115 @@ const deleteLoanTxn = asyncH(async (req, res) => {
   res.json({ id: before.id, deleted: true });
 });
 
+// ---------------- খরচের খাত ----------------
+
+/**
+ * Add, rename or remove one expense head. A rename also moves every existing
+ * expense to the new name, so old entries and reports follow the correction.
+ *   { action: 'add', name } | { action: 'rename', from, to } | { action: 'remove', name }
+ */
+const manageExpenseCategory = asyncH(async (req, res) => {
+  const { action } = req.body || {};
+  const clean = (v) => String(v || '').trim();
+  const [setting] = await query('SELECT id, expense_categories FROM settings LIMIT 1');
+  if (!setting) throw notFound('সেটিংস পাওয়া যায়নি');
+  let list = (() => { try { return JSON.parse(setting.expense_categories || '[]'); } catch { return []; } })();
+
+  let renamed = 0;
+  if (action === 'add') {
+    const name = clean(req.body.name);
+    if (!name) throw badRequest('খাতের নাম দিন');
+    if (list.includes(name)) throw badRequest('এই খাত আগে থেকেই আছে');
+    list.push(name);
+  } else if (action === 'rename') {
+    const from = clean(req.body.from);
+    const to = clean(req.body.to);
+    if (!from || !to) throw badRequest('পুরনো ও নতুন নাম দিন');
+    if (from !== to && list.includes(to)) throw badRequest('এই নামে খাত আগে থেকেই আছে');
+    list = list.includes(from) ? list.map((c) => (c === from ? to : c)) : [...list, to];
+    const [r] = await query('UPDATE expenses SET category = ? WHERE category = ?', [to, from])
+      .then((x) => [x]);
+    renamed = r?.affectedRows || 0;
+  } else if (action === 'remove') {
+    const name = clean(req.body.name);
+    list = list.filter((c) => c !== name);
+  } else {
+    throw badRequest('action দিন');
+  }
+
+  await query('UPDATE settings SET expense_categories = ? WHERE id = ?', [JSON.stringify(list), setting.id]);
+  await orders.audit(null, req.user, `Expense category ${action}`, 'Setting', setting.id, null, req.body);
+  res.json({ categories: list, renamed });
+});
+
+// ---------------- পাশের দোকান / পার্টি ----------------
+
+/** How one entry moves the balance (positive = they owe us). */
+function partyEffect(t) {
+  const amount = Number(t.amount || 0);
+  const cash = Number(t.cash_amount || 0);
+  switch (t.type) {
+    case 'give_goods': return amount - cash;   // মাল দিলাম, কিছু নগদ পেলাম
+    case 'take_goods': return -(amount - cash); // মাল আনলাম, কিছু নগদ দিলাম
+    case 'receive_cash': return -amount;       // তারা টাকা দিল
+    case 'pay_cash': return amount;            // আমরা টাকা দিলাম
+    default: return 0;
+  }
+}
+
+/** Every party with its running balance — the পার্টি list. */
+const partySummary = asyncH(async (_req, res) => {
+  const [parties, txns] = await Promise.all([
+    query('SELECT * FROM parties ORDER BY name'),
+    query('SELECT party_id, type, amount, cash_amount, date FROM party_txns'),
+  ]);
+  res.json(parties.map((p) => {
+    const own = txns.filter((t) => t.party_id === p.id);
+    const sumType = (type) => own.filter((t) => t.type === type)
+      .reduce((a, t) => a + Number(t.amount), 0);
+    const balance = Number(p.opening_balance || 0) + own.reduce((a, t) => a + partyEffect(t), 0);
+    return {
+      ...p,
+      entries: own.length,
+      goods_given: sumType('give_goods'),
+      goods_taken: sumType('take_goods'),
+      balance: Math.round(balance * 100) / 100,
+      last_date: own.map((t) => String(t.date)).sort().pop() || null,
+    };
+  }));
+});
+
+/** One party's খাতা: every entry with the running balance after it. */
+const partyDetail = asyncH(async (req, res) => {
+  const [party] = await query('SELECT * FROM parties WHERE id = ? LIMIT 1', [req.params.id]);
+  if (!party) throw notFound('পার্টি পাওয়া যায়নি');
+  const txns = await query(
+    'SELECT * FROM party_txns WHERE party_id = ? ORDER BY date, created_date', [party.id],
+  );
+  let balance = Number(party.opening_balance || 0);
+  const ledger = txns.map((t) => {
+    const effect = partyEffect(t);
+    balance += effect;
+    return {
+      ...t, amount: Number(t.amount), cash_amount: Number(t.cash_amount), effect, balance,
+    };
+  });
+  const sumType = (type, key = 'amount') => ledger.filter((t) => t.type === type)
+    .reduce((a, t) => a + t[key], 0);
+  res.json({
+    party,
+    ledger,
+    summary: {
+      opening_balance: Number(party.opening_balance || 0),
+      goods_given: sumType('give_goods'),
+      goods_taken: sumType('take_goods'),
+      cash_received: sumType('receive_cash') + sumType('give_goods', 'cash_amount'),
+      cash_paid: sumType('pay_cash') + sumType('take_goods', 'cash_amount'),
+      balance: Math.round(balance * 100) / 100,
+    },
+  });
+});
+
 // ---------------- Stock ----------------
 
 const createStockItem = asyncH(async (req, res) => {
@@ -841,6 +950,7 @@ module.exports = {
   createPurchase, updatePurchase, supplierDetail, createSupplierPayment, deleteSupplierPayment,
   supplierDueList,
   loanDetail, createLoanTxn, updateLoanTxn, deleteLoanTxn, updateQuotation,
+  partySummary, partyDetail, manageExpenseCategory,
   createStockItem, adjustStock,
   nextQuote, createQuotation, convertQuotation,
   salarySheet, saveSalarySheet,

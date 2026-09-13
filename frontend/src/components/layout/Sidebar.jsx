@@ -1,18 +1,20 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, ClipboardList, Users, CalendarDays, BarChart3, Receipt,
-  ShoppingCart, Truck, HandCoins, Boxes, Tags, Wallet, FileText, Calculator,
-  Settings as SettingsIcon, UserCog, Search, Crown, Landmark, ArrowLeftRight, Wallet2,
+  ShoppingCart, Truck, HandCoins, Boxes, Tags, Wallet, FileText, TrendingUp, AlertCircle,
+  Settings as SettingsIcon, UserCog, Crown, Landmark, ArrowLeftRight, Wallet2, Store,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSettings } from '@/hooks/useSettings';
 import { useAuth } from '@/hooks/useAuth';
 
-/** Primary nav — same order and labels as the original app. */
+/** Primary nav. */
 export const MAIN_NAV = [
   { to: '/', label: 'ড্যাশবোর্ড', icon: LayoutDashboard },
   { to: '/orders', label: 'অর্ডার', icon: ClipboardList },
   { to: '/customers', label: 'কাস্টমার', icon: Users },
+  { to: '/sales', label: 'বিক্রয়', icon: TrendingUp },
+  { to: '/dues', label: 'বাকি খাতা', icon: AlertCircle },
   { to: '/accounts', label: 'দৈনিক রিপোর্ট', icon: CalendarDays },
   { to: '/reports', label: 'রিপোর্ট', icon: BarChart3 },
 ];
@@ -22,6 +24,7 @@ export const MORE_NAV = [
   { to: '/expenses', label: 'খরচ', icon: Receipt },
   { to: '/purchases', label: 'ক্রয়', icon: ShoppingCart },
   { to: '/suppliers', label: 'সরবরাহকারী', icon: Truck },
+  { to: '/parties', label: 'পাশের দোকান / পার্টি', icon: Store },
   { to: '/owner', label: 'মালিকের হিসাব', icon: Crown },
   { to: '/bank', label: 'ব্যাংক', icon: Landmark },
   { to: '/branch-transfers', label: 'শাখা ট্রান্সফার', icon: ArrowLeftRight },
@@ -30,11 +33,10 @@ export const MORE_NAV = [
   { to: '/price-lists', label: 'মূল্য তালিকা', icon: Tags },
   { to: '/salary', label: 'স্যালারি', icon: Wallet },
   { to: '/quotations', label: 'কোটেশন', icon: FileText },
-  { to: '/materials', label: 'ক্যালকুলেটর', icon: Calculator },
+  { to: '/settings', label: 'সেটিংস (দোকানের তথ্য ও খাত)', icon: SettingsIcon },
 ];
 
 export const ADMIN_NAV = [
-  { to: '/settings', label: 'সেটিংস', icon: SettingsIcon },
   { to: '/users', label: 'ইউজার', icon: UserCog },
 ];
 
@@ -46,10 +48,10 @@ function NavItem({ to, label, icon: Icon, onNavigate }) {
       onClick={onNavigate}
       className={({ isActive }) =>
         cn(
-          'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+          'group flex items-center gap-3 rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
           isActive
-            ? 'glass-active text-primary'
-            : 'text-sidebar-foreground hover:bg-white/60',
+            ? 'border-primary bg-primary text-primary-foreground shadow-sm'
+            : 'border-transparent text-sidebar-foreground hover:border-primary/20 hover:bg-primary/10 hover:text-primary',
         )
       }
     >
@@ -64,9 +66,9 @@ export default function Sidebar({ onNavigate }) {
   const { user, isAdmin } = useAuth();
 
   return (
-    <div className="glass-nav flex h-full flex-col border-r border-white/40">
+    <div className="flex h-full flex-col border-r border-slate-200 bg-white">
       {/* brand */}
-      <div className="flex items-center gap-3 border-b border-white/40 p-4">
+      <div className="flex items-center gap-3 border-b border-slate-200 p-4">
         {setting.logo_url ? (
           <img src={setting.logo_url} alt="logo" className="h-10 w-10 rounded-md object-contain" />
         ) : (
@@ -92,8 +94,6 @@ export default function Sidebar({ onNavigate }) {
         </p>
         {MORE_NAV.map((item) => <NavItem key={item.to} {...item} onNavigate={onNavigate} />)}
 
-        <NavItem to="/search" label="খুঁজুন" icon={Search} onNavigate={onNavigate} />
-
         {isAdmin && (
           <>
             <p className="px-3 pb-1 pt-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -104,11 +104,11 @@ export default function Sidebar({ onNavigate }) {
         )}
       </nav>
 
-      <div className="border-t border-white/40 p-3">
+      <div className="border-t border-slate-200 p-3">
         <NavLink
           to="/settings/profile"
           onClick={onNavigate}
-          className="flex items-center gap-3 rounded-md p-2 hover:bg-white/60"
+          className="flex items-center gap-3 rounded-lg border border-transparent p-2 hover:border-primary/20 hover:bg-primary/10"
         >
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-sm font-semibold uppercase text-primary-foreground">
             {(user?.full_name || user?.email || '?').charAt(0)}

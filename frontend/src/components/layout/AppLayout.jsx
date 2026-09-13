@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Menu, X, Search, LogOut, Plus } from 'lucide-react';
+import { Menu, X, LogOut, Plus } from 'lucide-react';
 import Sidebar from './Sidebar';
 import { Button } from '@/components/ui';
 import { useAuth } from '@/hooks/useAuth';
@@ -38,7 +38,7 @@ export default function AppLayout() {
 
       <div className="relative lg:pl-60 print:pl-0">
         {/* top bar — mobile only, plus quick actions everywhere */}
-        <header className="glass-nav sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-white/40 px-3 lg:px-8 print:hidden">
+        <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-slate-200 bg-white/95 px-3 shadow-sm lg:px-8 print:hidden">
           <Button
             variant="ghost"
             size="icon"
@@ -54,9 +54,6 @@ export default function AppLayout() {
           </Link>
 
           <div className="ml-auto flex items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={() => navigate('/search')} aria-label="খুঁজুন">
-              <Search className="h-4.5 w-4.5" />
-            </Button>
             <Button size="sm" onClick={() => navigate('/orders/new')} className="hidden sm:inline-flex">
               <Plus className="h-4 w-4" /> নতুন অর্ডার
             </Button>

@@ -588,3 +588,42 @@ CREATE TABLE IF NOT EXISTS branch_transfers (
   created_by_id CHAR(24) NULL,
   INDEX idx_transfer_date (date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================
+-- পাশের দোকান / পার্টি হিসাব — goods and cash both ways
+-- ============================================================
+-- balance > 0: তারা আমাদের কাছে পাবে না, আমরা পাবো (they owe us)
+CREATE TABLE IF NOT EXISTS parties (
+  id              CHAR(24) NOT NULL PRIMARY KEY,
+  name            VARCHAR(190) NOT NULL,
+  shop_name       VARCHAR(190) NULL,
+  mobile          VARCHAR(30) NULL,
+  address         VARCHAR(255) NULL,
+  opening_balance DECIMAL(14,2) NOT NULL DEFAULT 0,
+  notes           TEXT NULL,
+  created_date  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_date  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  created_by_id CHAR(24) NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- type: give_goods (আমরা মাল দিলাম) | take_goods (আমরা মাল আনলাম)
+--       receive_cash (তারা টাকা দিল) | pay_cash (আমরা টাকা দিলাম)
+-- cash_amount: cash handed over on the spot with a goods entry.
+CREATE TABLE IF NOT EXISTS party_txns (
+  id          CHAR(24) NOT NULL PRIMARY KEY,
+  party_id    CHAR(24) NOT NULL,
+  party_name  VARCHAR(190) NULL,
+  date        DATE NOT NULL,
+  type        VARCHAR(20) NOT NULL DEFAULT 'give_goods',
+  description VARCHAR(255) NULL,
+  amount      DECIMAL(14,2) NOT NULL DEFAULT 0,
+  cash_amount DECIMAL(14,2) NOT NULL DEFAULT 0,
+  method      VARCHAR(30) NOT NULL DEFAULT 'Cash',
+  notes       TEXT NULL,
+  created_date  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_date  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  created_by_id CHAR(24) NULL,
+  INDEX idx_partytxn_party (party_id),
+  INDEX idx_partytxn_date (date),
+  CONSTRAINT fk_partytxn_party FOREIGN KEY (party_id) REFERENCES parties(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
