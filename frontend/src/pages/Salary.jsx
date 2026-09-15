@@ -149,6 +149,9 @@ export default function SalaryPage() {
               <Button variant="outline" size="sm" onClick={() => setPrinting('sheet')}>
                 <Printer className="h-4 w-4" /> মাসিক প্রিন্ট
               </Button>
+              <Button variant="outline" size="sm" onClick={() => setEditingStaff(staffBlank)}>
+                <Plus className="h-4 w-4" /> নতুন কর্মী
+              </Button>
               <Button size="sm" loading={busy} onClick={save}>
                 <Save className="h-4 w-4" /> সংরক্ষণ
               </Button>
@@ -243,8 +246,25 @@ export default function SalaryPage() {
                     {rows.map((r) => (
                       <tr key={r.staff_id}>
                         <td>
-                          <p className="font-medium">{r.staff_name}</p>
-                          <p className="text-xs text-muted-foreground">{r.position}</p>
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <p className="font-medium">{r.staff_name}</p>
+                              <p className="text-xs text-muted-foreground">{r.position}</p>
+                            </div>
+                            {(() => {
+                              const s = staff.find((x) => x.id === r.staff_id);
+                              return s && (
+                                <span className="flex shrink-0 gap-0.5">
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingStaff(s)} aria-label="সম্পাদনা" title="কর্মী সম্পাদনা">
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </Button>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setDeleteTarget(s)} aria-label="মুছুন" title="কর্মী মুছুন">
+                                    <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                                  </Button>
+                                </span>
+                              );
+                            })()}
+                          </div>
                         </td>
                         {[
                           'base_salary_snapshot', 'duty_days', 'absent_days', 'friday_count',
