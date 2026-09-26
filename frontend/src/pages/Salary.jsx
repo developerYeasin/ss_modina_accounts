@@ -14,7 +14,9 @@ import {
   PageHeader, DataTable, StatCard, EmptyState, PAYMENT_METHODS,
   PrintDoc, PrintTable, PrintTotals,
 } from '@/components/shared';
-import { BN_MONTH_NAMES, bnDate, downloadCsv, isoDate, money, num, toBnDigits } from '@/lib/utils';
+import {
+  BN_MONTH_NAMES, bnDate, downloadCsv, isoDate, money, monthEnd, monthStart, num, toBnDigits,
+} from '@/lib/utils';
 import { useSettings } from '@/hooks/useSettings';
 import { elementToPdf, downloadFile } from '@/lib/pdf';
 
@@ -406,7 +408,7 @@ export default function SalaryPage() {
                       type="button"
                       className="font-medium text-primary hover:underline"
                       onClick={() => setLedgerStaff({ id: s.staff_id, name: s.staff_name })}
-                      title="সব তারিখের অগ্রিম দেখুন"
+                      title="কর্মীর হিসাব দেখুন"
                     >
                       {s.staff_name}
                     </button>
@@ -430,7 +432,7 @@ export default function SalaryPage() {
                   type="button"
                   className="font-medium text-primary hover:underline"
                   onClick={() => setLedgerStaff({ id: a.staff_id, name: a.staff_name })}
-                  title="সব তারিখের অগ্রিম দেখুন"
+                  title="কর্মীর হিসাব দেখুন"
                 >
                   {a.staff_name}
                 </button>
@@ -469,7 +471,13 @@ export default function SalaryPage() {
             mobileCard={(a) => (
               <div className="space-y-1">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium">{a.staff_name}</span>
+                  <button
+                    type="button"
+                    className="font-medium text-primary underline-offset-2 hover:underline"
+                    onClick={() => setLedgerStaff({ id: a.staff_id, name: a.staff_name })}
+                  >
+                    {a.staff_name}
+                  </button>
                   <span className="num font-semibold text-destructive">
                     {money(a.amount, currency)}
                   </span>
@@ -482,6 +490,13 @@ export default function SalaryPage() {
           />
         </>
       ) : (
+        <>
+        <StaffAdvanceSearch
+          staff={staff}
+          value={staffSearch}
+          onChange={setStaffSearch}
+          onPick={setLedgerStaff}
+        />
         <DataTable
           columns={[
             { key: 'name', label: 'নাম', render: (s) => (
@@ -489,7 +504,7 @@ export default function SalaryPage() {
                 type="button"
                 className="font-medium text-primary hover:underline"
                 onClick={() => setLedgerStaff(s)}
-                title="অগ্রিমের খতিয়ান দেখুন"
+                title="কর্মীর হিসাব দেখুন"
               >
                 {s.name}
               </button>
@@ -506,7 +521,7 @@ export default function SalaryPage() {
             ) },
             { key: 'actions', label: '', align: 'right', render: (s) => (
               <span className="flex justify-end gap-1">
-                <Button variant="ghost" size="icon" onClick={() => setLedgerStaff(s)} aria-label="অগ্রিমের খতিয়ান" title="অগ্রিমের খতিয়ান">
+                <Button variant="ghost" size="icon" onClick={() => setLedgerStaff(s)} aria-label="কর্মীর হিসাব" title="কর্মীর হিসাব">
                   <HandCoins className="h-4 w-4" />
                 </Button>
                 <Button variant="ghost" size="icon" onClick={() => setEditingStaff(s)} aria-label="সম্পাদনা">
@@ -526,7 +541,37 @@ export default function SalaryPage() {
               action={<Button size="sm" onClick={() => setEditingStaff(staffBlank)}><Plus className="h-4 w-4" /> যোগ করুন</Button>}
             />
           }
+          mobileCard={(s) => (
+            <div className="space-y-2">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="font-semibold">{s.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {[s.position, s.phone].filter(Boolean).join(' · ') || '—'}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="num font-semibold">{money(s.base_salary, currency)}</p>
+                  <Badge variant={s.active ? 'success' : 'secondary'}>
+                    {s.active ? 'সক্রিয়' : 'নিষ্ক্রিয়'}
+                  </Badge>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button size="sm" className="flex-1" onClick={() => setLedgerStaff(s)}>
+                  <HandCoins className="h-4 w-4" /> হিসাব দেখুন
+                </Button>
+                <Button variant="ghost" size="icon" onClick={() => setEditingStaff(s)} aria-label="সম্পাদনা">
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(s)} aria-label="মুছুন">
+                  <Trash2 className="h-4 w-4 text-destructive" />
+                </Button>
+              </div>
+            </div>
+          )}
         />
+        </>
       )}
 
       <StaffDialog
@@ -567,7 +612,7 @@ export default function SalaryPage() {
             notes: `[${period}]`,
           });
           refetchPaid();
-          ['expenses', 'daily', 'dashboard'].forEach((k) => queryClient.invalidateQueries({ queryKey: [k] }));
+          ['expenses', 'daily', 'dashboard', 'staff-advance-ledger'].forEach((k) => queryClient.invalidateQueries({ queryKey: [k] }));
           toast({ title: 'বেতন পরিশোধ বুক হয়েছে', description: 'ভুল হলে খরচ থেকে সম্পাদনা বা মুছতে পারবেন' });
         }}
       />
@@ -913,7 +958,7 @@ function StaffAdvanceSearch({ staff, value, onChange, onPick }) {
 
   return (
     <Card className="mb-4">
-      <CardHeader><CardTitle>কর্মীর অগ্রিমের খতিয়ান</CardTitle></CardHeader>
+      <CardHeader><CardTitle>কর্মীর হিসাব — তারিখ অনুযায়ী অগ্রিম ও বেতন</CardTitle></CardHeader>
       <CardContent className="space-y-2">
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -958,61 +1003,119 @@ function waNumber(phone) {
   return digits.length >= 10 ? digits : '';
 }
 
+
+/** Expense head the backend books every staff advance under (mirrors domainController). */
+const ADVANCE_CATEGORY = 'স্টাফ অগ্রিম';
+
+/** Quick ranges for the statement; each returns [from, to] as yyyy-MM-dd ('' = open). */
+const RANGE_PRESETS = [
+  { key: 'month', label: 'এই মাস', get: () => [monthStart(), isoDate()] },
+  { key: 'last', label: 'গত মাস', get: () => {
+    const d = new Date();
+    const prev = new Date(d.getFullYear(), d.getMonth() - 1, 1);
+    return [monthStart(prev), monthEnd(prev)];
+  } },
+  { key: 'year', label: 'এই বছর', get: () => [`${new Date().getFullYear()}-01-01`, isoDate()] },
+  { key: 'all', label: 'সব সময়', get: () => ['', ''] },
+];
+
 /**
- * One worker's every অগ্রিম — each date and amount, grouped by month with the
- * month's total — as a printable paper that can also go out on WhatsApp.
+ * One worker's full হিসাব for any date range — every অগ্রিম, every বেতন
+ * paid, and anything else booked in their name, each with its date, grouped by
+ * month with totals — as a printable paper that can also go out on WhatsApp.
  */
 function AdvanceLedger({ staff, currency, onBack }) {
   const { setting } = useSettings();
   const { toast } = useToast();
-  const [year, setYear] = useState('all');
+  const [[from, to], setRange] = useState(RANGE_PRESETS[0].get);
   const [sharing, setSharing] = useState(false);
   const paperRef = useRef(null);
+  const name = staff.name || staff.staff_name;
 
-  const { data: entries = [], isLoading, error, refetch } = useQuery({
-    queryKey: ['staff-advance-ledger', staff.id],
-    queryFn: () => StaffAdvance.filter({ staff_id: staff.id }, 'date', 5000),
+  const dateFilter = from || to
+    ? { date: { ...(from && { $gte: from }), ...(to && { $lte: to }) } }
+    : {};
+
+  const advancesQ = useQuery({
+    queryKey: ['staff-advance-ledger', staff.id, from, to],
+    queryFn: () => StaffAdvance.filter({ staff_id: staff.id, ...dateFilter }, 'date', 5000),
   });
-
-  const years = [...new Set(entries.map((a) => Number(a.year)))].sort((a, b) => b - a);
+  // Salary payments and anything else paid out in the worker's name. Advances
+  // are already booked as expenses too, so that head is skipped here.
+  const othersQ = useQuery({
+    queryKey: ['staff-advance-ledger', 'expenses', name, from, to],
+    queryFn: () => Expense.filter({
+      person: name, archived: false, category: { $ne: ADVANCE_CATEGORY }, ...dateFilter,
+    }, 'date', 5000),
+    enabled: Boolean(name),
+  });
+  const isLoading = advancesQ.isLoading || othersQ.isLoading;
+  const error = advancesQ.error || othersQ.error;
+  const refetch = () => { advancesQ.refetch(); othersQ.refetch(); };
 
   // Newest month first; inside a month, in date order.
-  const { shown, months } = useMemo(() => {
-    const list = entries
-      .filter((a) => year === 'all' || Number(a.year) === Number(year))
-      .sort((a, b) => String(a.date).localeCompare(String(b.date)));
-    const map = new Map();
-    for (const a of list) {
-      const k = `${a.year}-${String(a.month).padStart(2, '0')}`;
-      const m = map.get(k) || { key: k, year: Number(a.year), month: Number(a.month), rows: [], total: 0 };
-      m.rows.push(a);
-      m.total += num(a.amount);
-      map.set(k, m);
-    }
-    return { shown: list, months: [...map.values()].sort((a, b) => b.key.localeCompare(a.key)) };
-  }, [entries, year]);
+  const { shown, months, byKind } = useMemo(() => {
+    const list = [
+      ...(advancesQ.data || []).map((a) => ({
+        id: a.id, date: a.date, kind: 'অগ্রিম', method: a.method, notes: a.notes, amount: num(a.amount),
+      })),
+      ...(othersQ.data || []).map((x) => ({
+        id: x.id,
+        date: x.date,
+        kind: x.category === SALARY_CATEGORY ? 'বেতন' : x.category,
+        method: x.method,
+        notes: [x.description, x.notes].filter(Boolean).join(' · '),
+        amount: num(x.amount),
+      })),
+    ].sort((a, b) => String(a.date).localeCompare(String(b.date)));
 
-  const grand = shown.reduce((t, a) => t + num(a.amount), 0);
-  const name = staff.name || staff.staff_name;
+    const map = new Map();
+    const kinds = new Map();
+    for (const a of list) {
+      const k = isoDate(a.date).slice(0, 7);
+      const m = map.get(k) || { key: k, year: Number(k.slice(0, 4)), month: Number(k.slice(5)), rows: [], total: 0 };
+      m.rows.push(a);
+      m.total += a.amount;
+      map.set(k, m);
+      const kd = kinds.get(a.kind) || { kind: a.kind, count: 0, total: 0 };
+      kd.count += 1;
+      kd.total += a.amount;
+      kinds.set(a.kind, kd);
+    }
+    return {
+      shown: list,
+      months: [...map.values()].sort((a, b) => b.key.localeCompare(a.key)),
+      byKind: [...kinds.values()].sort((a, b) => b.total - a.total),
+    };
+  }, [advancesQ.data, othersQ.data]);
+
+  const grand = shown.reduce((t, a) => t + a.amount, 0);
   const monthLabel = (m) => `${BN_MONTH_NAMES[m.month - 1]} ${toBnDigits(m.year)}`;
-  const scope = year === 'all' ? 'সব সময়' : toBnDigits(year);
+  const scope = from || to
+    ? `${from ? bnDate(from) : 'শুরু'} থেকে ${to ? bnDate(to) : 'আজ'}`
+    : 'সব সময়';
+  const activePreset = RANGE_PRESETS.find((p) => {
+    const [f, t] = p.get();
+    return f === from && t === to;
+  })?.key;
 
   /** The same statement as text, opened in WhatsApp addressed to the worker. */
   function shareWhatsApp() {
     const lines = [
       `*${setting?.business_name || ''}*`,
-      `অগ্রিমের হিসাব — ${name}${staff.position ? ` (${staff.position})` : ''}`,
+      `কর্মীর হিসাব — ${name}${staff.position ? ` (${staff.position})` : ''}`,
       `সময়: ${scope}`,
       '',
     ];
     for (const m of months) {
       lines.push(`*${monthLabel(m)}* — মোট ${money(m.total, currency)}`);
       m.rows.forEach((a) => {
-        lines.push(`  • ${bnDate(a.date)}: ${money(a.amount, currency)}${a.notes ? ` (${a.notes})` : ''}`);
+        lines.push(`  • ${bnDate(a.date)} — ${a.kind}: ${money(a.amount, currency)}${a.notes ? ` (${a.notes})` : ''}`);
       });
       lines.push('');
     }
-    lines.push(`*সর্বমোট অগ্রিম: ${money(grand, currency)}* (${toBnDigits(shown.length)} বার)`);
+    byKind.forEach((k) => lines.push(`${k.kind}: ${money(k.total, currency)} (${toBnDigits(k.count)} বার)`));
+    lines.push(`*সর্বমোট নেওয়া: ${money(grand, currency)}*`);
     const text = encodeURIComponent(lines.join('\n'));
     window.open(`https://wa.me/${waNumber(staff.phone)}?text=${text}`, '_blank', 'noopener');
   }
@@ -1028,12 +1131,12 @@ function AdvanceLedger({ staff, currency, onBack }) {
     setSharing(true);
     try {
       const safe = String(name || 'staff').replace(/[\\/:*?"<>|]+/g, ' ').trim();
-      const file = await elementToPdf(paperRef.current, `অগ্রিম-${safe}-${year === 'all' ? 'সব' : year}.pdf`);
-      const caption = `${name} — অগ্রিমের হিসাব (${scope}) · সর্বমোট ${money(grand, currency)}`;
+      const file = await elementToPdf(paperRef.current, `হিসাব-${safe}-${from || 'শুরু'}-${to || 'আজ'}.pdf`);
+      const caption = `${name} — হিসাব (${scope}) · সর্বমোট ${money(grand, currency)}`;
 
       if (navigator.canShare?.({ files: [file] })) {
         try {
-          await navigator.share({ files: [file], title: 'অগ্রিমের খতিয়ান', text: caption });
+          await navigator.share({ files: [file], title: 'কর্মীর হিসাব', text: caption });
         } catch (err) {
           if (err?.name !== 'AbortError') throw err;
         }
@@ -1062,10 +1165,6 @@ function AdvanceLedger({ staff, currency, onBack }) {
         <Button variant="outline" size="sm" onClick={onBack}>
           <ArrowLeft className="h-4 w-4" /> ফিরে যান
         </Button>
-        <Select className="h-9 w-36" value={year} onChange={(e) => setYear(e.target.value)}>
-          <option value="all">সব বছর</option>
-          {years.map((y) => <option key={y} value={y}>{toBnDigits(y)}</option>)}
-        </Select>
         <Button size="sm" onClick={() => window.print()} disabled={!shown.length}>
           <Printer className="h-4 w-4" /> প্রিন্ট / PDF
         </Button>
@@ -1084,14 +1183,44 @@ function AdvanceLedger({ staff, currency, onBack }) {
         </Button>
       </div>
 
+      <Card className="no-print mb-4">
+        <CardContent className="space-y-3 pt-4">
+          <p className="font-semibold">{name} — কোন তারিখ থেকে কোন তারিখ?</p>
+          <div className="flex flex-wrap gap-2">
+            {RANGE_PRESETS.map((p) => (
+              <Button
+                key={p.key} size="sm" variant={activePreset === p.key ? 'default' : 'outline'}
+                onClick={() => setRange(p.get())}
+              >
+                {p.label}
+              </Button>
+            ))}
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="তারিখ থেকে">
+              <Input type="date" value={from} onChange={(e) => setRange([e.target.value, to])} />
+            </Field>
+            <Field label="তারিখ পর্যন্ত">
+              <Input type="date" value={to} onChange={(e) => setRange([from, e.target.value])} />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+            {byKind.map((k) => (
+              <StatCard key={k.kind} label={`${k.kind} (${toBnDigits(k.count)} বার)`} value={k.total} currency={currency} tone="info" />
+            ))}
+            <StatCard label="সর্বমোট নেওয়া" value={grand} currency={currency} tone="danger" />
+          </div>
+        </CardContent>
+      </Card>
+
       {isLoading ? <Loading /> : error ? <ErrorState error={error} onRetry={refetch} /> : (
         <div ref={paperRef} data-pdf-root>
         <PrintDoc
-          title="কর্মীর অগ্রিমের খতিয়ান"
+          title="কর্মীর হিসাব"
           copyLabel="কর্মী কপি"
-          meta={[['কর্মী', name], ['সময়', scope], ['মোট অগ্রিম', money(grand, currency)]]}
+          meta={[['কর্মী', name], ['সময়', scope], ['সর্বমোট', money(grand, currency)]]}
           signatures={['কর্মীর স্বাক্ষর', 'মালিকের স্বাক্ষর']}
-          footerNote="উপরের সব অগ্রিম বুঝে পেলাম।"
+          footerNote="উপরের সব টাকা বুঝে পেলাম।"
         >
           <section className="print-parties">
             <div>
@@ -1099,17 +1228,19 @@ function AdvanceLedger({ staff, currency, onBack }) {
               <p className="print-party-name">{name}</p>
               <p>পদ: {staff.position || '—'}</p>
               <p>মোবাইল: {staff.phone || '—'}</p>
+              <p>মূল বেতন: {money(staff.base_salary, currency)}</p>
             </div>
             <div>
-              <p className="print-party-label">সারাংশ</p>
-              <p>মাস: {toBnDigits(months.length)} টি · অগ্রিম নেওয়া: {toBnDigits(shown.length)} বার</p>
-              <p>মূল বেতন: {money(staff.base_salary, currency)}</p>
-              <p style={{ fontWeight: 700 }}>সর্বমোট অগ্রিম: {money(grand, currency)}</p>
+              <p className="print-party-label">সারাংশ ({scope})</p>
+              {byKind.map((k) => (
+                <p key={k.kind}>{k.kind}: {money(k.total, currency)} ({toBnDigits(k.count)} বার)</p>
+              ))}
+              <p style={{ fontWeight: 700 }}>সর্বমোট নেওয়া: {money(grand, currency)}</p>
             </div>
           </section>
 
           {months.length === 0 ? (
-            <p style={{ padding: '16px 0', textAlign: 'center' }}>এই কর্মীর কোনো অগ্রিম নেই</p>
+            <p style={{ padding: '16px 0', textAlign: 'center' }}>এই সময়ে এই কর্মীর কোনো লেনদেন নেই</p>
           ) : (
             <>
               <PrintTable
@@ -1141,26 +1272,24 @@ function AdvanceLedger({ staff, currency, onBack }) {
 
               <PrintTable
                 head={[
-                  { label: 'ক্র.', width: '34px', align: 'center' },
-                  { label: 'তারিখ', width: '150px' },
-                  { label: 'মাধ্যম', width: '90px' },
-                  { label: 'নোট' },
-                  { label: 'টাকা', align: 'right', width: '120px' },
+                  { label: 'তারিখ', width: '130px' },
+                  { label: 'ধরন', width: '80px' },
+                  { label: 'বিবরণ' },
+                  { label: 'টাকা', align: 'right', width: '110px' },
                 ]}
               >
                 {months.map((m) => [
                   <tr key={`${m.key}-head`}>
-                    <td colSpan={4} style={{ fontWeight: 700, background: '#eef2f7' }}>{monthLabel(m)}</td>
+                    <td colSpan={3} style={{ fontWeight: 700, background: '#eef2f7' }}>{monthLabel(m)}</td>
                     <td className="num" style={{ textAlign: 'right', fontWeight: 700, background: '#eef2f7' }}>
                       {money(m.total, currency)}
                     </td>
                   </tr>,
-                  ...m.rows.map((a, i) => (
+                  ...m.rows.map((a) => (
                     <tr key={a.id}>
-                      <td className="num" style={{ textAlign: 'center' }}>{toBnDigits(i + 1)}</td>
                       <td>{bnDate(a.date)}</td>
-                      <td>{a.method || '—'}</td>
-                      <td>{a.notes || '—'}</td>
+                      <td>{a.kind}</td>
+                      <td>{[a.notes, a.method].filter(Boolean).join(' · ') || '—'}</td>
                       <td className="num" style={{ textAlign: 'right' }}>{money(a.amount, currency)}</td>
                     </tr>
                   )),
