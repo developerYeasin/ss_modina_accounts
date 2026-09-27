@@ -48,7 +48,9 @@ const Parties = lazy(() => import('@/pages/Parties'));
 const PartyDetail = lazy(() => import('@/pages/PartyDetail'));
 
 export default function App() {
+  
   const { user, loading } = useAuth();
+
 
   if (loading) {
     return (
