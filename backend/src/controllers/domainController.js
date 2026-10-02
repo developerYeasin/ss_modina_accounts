@@ -802,6 +802,10 @@ const staffAdvanceReport = asyncH(async (req, res) => {
     : await query(
       'SELECT * FROM staff_advances WHERE year = ? ORDER BY date, created_date', [year],
     );
+  if (month) {
+    rows.push(...await ledgerAdvances(year, month));
+    rows.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  }
 
   const byStaff = new Map();
   for (const r of rows) {
@@ -822,14 +826,38 @@ const staffAdvanceReport = asyncH(async (req, res) => {
   });
 });
 
+/**
+ * অগ্রিম typed straight into the খরচ ledger (category স্টাফ অগ্রিম) rather than
+ * through the অগ্রিম tab. They have no staff_advances row, so they are matched
+ * to a worker by the expense's person name.
+ */
+async function ledgerAdvances(year, month) {
+  const rows = await query(
+    `SELECT e.id, e.date, e.amount, e.method, e.notes, s.id AS staff_id, s.name AS staff_name
+       FROM expenses e
+       JOIN staff s ON TRIM(s.name) = TRIM(e.person)
+      WHERE e.category = ? AND e.archived = 0
+        AND YEAR(e.date) = ? AND MONTH(e.date) = ?
+        AND NOT EXISTS (SELECT 1 FROM staff_advances a WHERE a.expense_id = e.id)
+      ORDER BY e.date, e.created_date`,
+    [ADVANCE_CATEGORY, year, month],
+  );
+  return rows.map((r) => ({ ...r, year, month, amount: Number(r.amount), source: 'expense' }));
+}
+
 /** Advances taken by each staff member in one month, keyed by staff id. */
 async function advanceTotals(year, month) {
-  const rows = await query(
-    `SELECT staff_id, COALESCE(SUM(amount), 0) AS total
-       FROM staff_advances WHERE year = ? AND month = ? GROUP BY staff_id`,
-    [year, month],
-  );
-  return new Map(rows.map((r) => [r.staff_id, Number(r.total)]));
+  const [rows, extra] = await Promise.all([
+    query(
+      `SELECT staff_id, COALESCE(SUM(amount), 0) AS total
+         FROM staff_advances WHERE year = ? AND month = ? GROUP BY staff_id`,
+      [year, month],
+    ),
+    ledgerAdvances(year, month),
+  ]);
+  const totals = new Map(rows.map((r) => [r.staff_id, Number(r.total)]));
+  for (const e of extra) totals.set(e.staff_id, (totals.get(e.staff_id) || 0) + e.amount);
+  return totals;
 }
 
 /**

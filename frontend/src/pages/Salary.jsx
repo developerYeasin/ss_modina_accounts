@@ -47,6 +47,8 @@ export default function SalaryPage() {
   const [editingStaff, setEditingStaff] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [advanceOpen, setAdvanceOpen] = useState(false);
+  // Staff id the অগ্রিম dialog was opened for from the sheet row.
+  const [advanceFor, setAdvanceFor] = useState(null);
   const [deleteAdvance, setDeleteAdvance] = useState(null);
   const [editAdvance, setEditAdvance] = useState(null);
   const [payTarget, setPayTarget] = useState(null);
@@ -303,14 +305,23 @@ export default function SalaryPage() {
                           {money(num(r.lunch_days) * num(lunchRate), currency)}
                         </td>
                         <td className="num text-right">
-                          <button
-                            type="button"
-                            onClick={() => setTab('advance')}
-                            className="font-medium text-primary hover:underline"
-                            title="অগ্রিম ট্যাব থেকে যোগ বা বাদ করুন"
-                          >
-                            {money(r.advance, currency)}
-                          </button>
+                          <span className="inline-flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setTab('advance')}
+                              className="font-medium text-primary hover:underline"
+                              title="অগ্রিমের তালিকা দেখুন"
+                            >
+                              {money(r.advance, currency)}
+                            </button>
+                            <Button
+                              variant="ghost" size="icon" className="no-print h-7 w-7"
+                              onClick={() => setAdvanceFor(r.staff_id)}
+                              aria-label="অগ্রিম যোগ করুন" title="এই কর্মীর অগ্রিম যোগ করুন"
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                            </Button>
+                          </span>
                         </td>
                         {['owner_due', 'previous_due'].map((key) => (
                           <td key={key} className="text-right">
@@ -442,7 +453,9 @@ export default function SalaryPage() {
               { key: 'amount', label: 'পরিমাণ', align: 'right', render: (a) => (
                 <span className="num font-semibold text-destructive">{money(a.amount, currency)}</span>
               ) },
-              { key: 'actions', label: '', align: 'right', render: (a) => (
+              { key: 'actions', label: '', align: 'right', render: (a) => (a.source === 'expense' ? (
+                <span className="text-xs text-muted-foreground" title="খরচের খাতা থেকে সংশোধন করুন">খরচ থেকে</span>
+              ) : (
                 <span className="no-print flex justify-end gap-1">
                   <Button variant="ghost" size="icon" onClick={() => setEditAdvance(a)} aria-label="সংশোধন">
                     <Pencil className="h-4 w-4" />
@@ -455,7 +468,7 @@ export default function SalaryPage() {
                     <Trash2 className="h-4 w-4 text-destructive" />
                   </Button>
                 </span>
-              ) },
+              )) },
             ]}
             rows={advances}
             empty={
@@ -586,13 +599,14 @@ export default function SalaryPage() {
       />
 
       <AdvanceDialog
-        open={advanceOpen || Boolean(editAdvance)}
+        open={advanceOpen || Boolean(editAdvance) || Boolean(advanceFor)}
         advance={editAdvance}
-        onClose={() => { setAdvanceOpen(false); setEditAdvance(null); }}
+        presetStaffId={advanceFor}
+        onClose={() => { setAdvanceOpen(false); setEditAdvance(null); setAdvanceFor(null); }}
         staff={staff.filter((s) => s.active)}
         year={year}
         month={month}
-        onSaved={() => { setAdvanceOpen(false); setEditAdvance(null); refreshAdvances(); }}
+        onSaved={() => { setAdvanceOpen(false); setEditAdvance(null); setAdvanceFor(null); refreshAdvances(); }}
       />
 
       <ConfirmDialog
@@ -720,12 +734,19 @@ function StaffDialog({ staff, onClose, onSaved }) {
   );
 }
 
+/** Today when it falls in the chosen month, otherwise that month's first day. */
+const defaultDateIn = (year, month) => {
+  const today = isoDate();
+  const prefix = `${year}-${String(month).padStart(2, '0')}`;
+  return today.startsWith(prefix) ? today : `${prefix}-01`;
+};
+
 /**
  * Hand an advance to a staff member. The backend books a matching expense, so
  * the cash shows up in খরচ and the month's salary drops by the same amount —
  * nothing has to be typed twice.
  */
-function AdvanceDialog({ open, onClose, staff, year, month, onSaved, advance }) {
+function AdvanceDialog({ open, onClose, staff, year, month, onSaved, advance, presetStaffId }) {
   const { toast } = useToast();
   const { currency } = useSettings();
   const [form, setForm] = useState({
@@ -734,14 +755,14 @@ function AdvanceDialog({ open, onClose, staff, year, month, onSaved, advance }) 
   const [busy, setBusy] = useState(false);
   const isEdit = Boolean(advance?.id);
 
-  const key = open ? advance?.id || 'new' : null;
+  const key = open ? advance?.id || `new-${presetStaffId || ''}` : null;
   const [lastKey, setLastKey] = useState(null);
   if (key !== lastKey) {
     setLastKey(key);
     if (open) {
       setForm(isEdit
         ? { staff_id: advance.staff_id, date: advance.date, amount: advance.amount, method: advance.method || 'Cash', notes: advance.notes || '' }
-        : { staff_id: '', date: isoDate(), amount: '', method: 'Cash', notes: '' });
+        : { staff_id: presetStaffId || '', date: defaultDateIn(year, month), amount: '', method: 'Cash', notes: '' });
     }
   }
 
