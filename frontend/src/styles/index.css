@@ -248,7 +248,22 @@
   }
   .print-area { box-shadow: none !important; }
   /* Every printed paper keeps its crest, watermark and rules on paper too. */
-  .print-sheet { border: 2px solid #14532d !important; break-inside: avoid; }
+  /* The sheet must be allowed to flow across pages. `break-inside: avoid`
+     plus `overflow: hidden` made the browser push the whole sheet to page 2
+     whenever it was even slightly taller than what fit — leaving page 1
+     blank. Now a paper that fits prints on one A4; a longer one simply
+     continues onto the next page. */
+  .print-sheet {
+    border: 2px solid #14532d !important;
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+    overflow: visible !important;
+    max-width: none !important;
+    margin: 0 !important;
+  }
+  /* Screen-only layout must not add height or transforms on paper. */
+  html, body, #root, .min-h-screen { min-height: 0 !important; height: auto !important; }
+  main, .animate-fade-in { animation: none !important; transform: none !important; }
   .print-watermark { opacity: 0.09 !important; }
   .print-table thead th, .print-title-band, .print-totals dl > div.strong,
   .print-totals dl > div.danger, .print-table tbody tr:nth-child(even) td,

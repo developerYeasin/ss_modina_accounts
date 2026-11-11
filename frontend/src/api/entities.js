@@ -53,6 +53,10 @@ export const BankTxn = entityClient('BankTxn');
 export const BranchTransfer = entityClient('BranchTransfer');
 export const Party = entityClient('Party');
 export const PartyTxn = entityClient('PartyTxn');
+export const MapProduct = entityClient('MapProduct');
+export const CurtainWallProduct = entityClient('CurtainWallProduct');
+export const CurtainWallHardware = entityClient('CurtainWallHardware');
+export const QuickSale = entityClient('QuickSale');
 
 export const ExpenseCategories = {
   add: (name) => api.post('/settings/expense-categories', { action: 'add', name }),

@@ -97,13 +97,15 @@ async function cashFlow(op, day) {
             FROM party_txns WHERE ${w}) AS party_in,
          (SELECT COALESCE(SUM(CASE WHEN type = 'pay_cash' THEN amount
                                    WHEN type = 'take_goods' THEN cash_amount ELSE 0 END),0)
-            FROM party_txns WHERE ${w}) AS party_out`,
-    Array(13).fill(day),
+            FROM party_txns WHERE ${w}) AS party_out,
+         (SELECT COALESCE(SUM(amount),0) FROM quick_sales WHERE kind = 'sale' AND ${w}) AS quick_in,
+         (SELECT COALESCE(SUM(amount),0) FROM quick_sales WHERE kind = 'purchase' AND ${w}) AS quick_out`,
+    Array(15).fill(day),
   );
   const v = Object.fromEntries(Object.entries(r).map(([k, x]) => [k, Number(x)]));
-  v.cash_in = v.collected + v.owner_invest + v.bank_withdraw + v.loan_in + v.party_in;
+  v.cash_in = v.collected + v.owner_invest + v.bank_withdraw + v.loan_in + v.party_in + v.quick_in;
   v.cash_out = v.expenses + v.purchase_paid + v.supplier_paid + v.owner_withdraw
-    + v.bank_deposit + v.loan_out + v.party_out;
+    + v.bank_deposit + v.loan_out + v.party_out + v.quick_out;
   v.net = v.cash_in - v.cash_out;
   return v;
 }
@@ -113,7 +115,7 @@ const daily = asyncH(async (req, res) => {
   const day = req.query.date || today();
   const [
     orders, payments, expenses, purchases, supplierPayments, ownerTxns, bankTxns, loanTxns,
-    partyTxns, flow, before,
+    partyTxns, quickSales, flow, before,
   ] = await Promise.all([
     query('SELECT * FROM orders WHERE order_date = ? AND archived = 0 ORDER BY created_date DESC', [day]),
     query('SELECT * FROM payments WHERE date = ? AND archived = 0 ORDER BY created_date DESC', [day]),
@@ -125,6 +127,7 @@ const daily = asyncH(async (req, res) => {
     query(`SELECT t.*, l.type AS loan_type FROM loan_txns t JOIN loans l ON l.id = t.loan_id
             WHERE t.date = ? ORDER BY t.created_date DESC`, [day]),
     query('SELECT * FROM party_txns WHERE date = ? ORDER BY created_date DESC', [day]),
+    query('SELECT * FROM quick_sales WHERE date = ? ORDER BY created_date DESC', [day]),
     cashFlow('=', day),
     // গতকালের জের: every earlier day's cash in minus cash out.
     cashFlow('<', day),
@@ -134,6 +137,7 @@ const daily = asyncH(async (req, res) => {
   res.json({
     date: day,
     orders, payments, expenses, purchases,
+    quick_sales: quickSales,
     supplier_payments: supplierPayments,
     owner_txns: ownerTxns,
     bank_txns: bankTxns,
@@ -364,7 +368,7 @@ const sales = asyncH(async (req, res) => {
   const year = Number(req.query.year) || new Date().getFullYear();
   const month = Number(req.query.month) || null;
 
-  const [orderRows, payRows, stockRows] = await Promise.all([
+  const [orderRows, payRows, stockRows, quickRows] = await Promise.all([
     query(`SELECT MONTH(order_date) AS m, COUNT(*) AS orders,
                   COALESCE(SUM(total_selling),0) AS sales, COALESCE(SUM(due),0) AS due
              FROM orders WHERE archived = 0 AND YEAR(order_date) = ? GROUP BY m`, [year]),
@@ -373,6 +377,8 @@ const sales = asyncH(async (req, res) => {
              FROM payments WHERE archived = 0 AND YEAR(date) = ? GROUP BY m`, [year]),
     query(`SELECT MONTH(date) AS m, COALESCE(SUM(amount),0) AS stock_sales, COUNT(*) AS entries
              FROM stock_adjustments WHERE type = 'sale' AND YEAR(date) = ? GROUP BY m`, [year]),
+    query(`SELECT MONTH(date) AS m, COALESCE(SUM(amount),0) AS quick_sales
+             FROM quick_sales WHERE kind = 'sale' AND YEAR(date) = ? GROUP BY m`, [year]),
   ]);
 
   const pick = (rows, m) => rows.find((r) => Number(r.m) === m) || {};
@@ -382,7 +388,8 @@ const sales = asyncH(async (req, res) => {
     const p = pick(payRows, m);
     const s = pick(stockRows, m);
     const orderSales = Number(o.sales || 0);
-    const stockSales = Number(s.stock_sales || 0);
+    // খুচরা নগদ বিক্রি (মেমো ছাড়া) স্টক থেকে নগদ বিক্রির সাথেই গোনা হয়।
+    const stockSales = Number(s.stock_sales || 0) + Number(pick(quickRows, m).quick_sales || 0);
     return {
       month: m,
       orders: Number(o.orders || 0),
@@ -397,7 +404,7 @@ const sales = asyncH(async (req, res) => {
 
   let days = [];
   if (month) {
-    const [od, pd, sd] = await Promise.all([
+    const [od, pd, sd, qd] = await Promise.all([
       query(`SELECT order_date AS d, COUNT(*) AS orders, COALESCE(SUM(total_selling),0) AS sales,
                     COALESCE(SUM(due),0) AS due
                FROM orders WHERE archived = 0 AND YEAR(order_date) = ? AND MONTH(order_date) = ?
@@ -409,14 +416,18 @@ const sales = asyncH(async (req, res) => {
       query(`SELECT date AS d, COALESCE(SUM(amount),0) AS stock_sales
                FROM stock_adjustments WHERE type = 'sale' AND YEAR(date) = ? AND MONTH(date) = ?
               GROUP BY date`, [year, month]),
+      query(`SELECT date AS d, COALESCE(SUM(amount),0) AS quick_sales
+               FROM quick_sales WHERE kind = 'sale' AND YEAR(date) = ? AND MONTH(date) = ?
+              GROUP BY date`, [year, month]),
     ]);
-    const dates = [...new Set([...od, ...pd, ...sd].map((r) => String(r.d)))].sort().reverse();
+    const dates = [...new Set([...od, ...pd, ...sd, ...qd].map((r) => String(r.d)))].sort().reverse();
     days = dates.map((d) => {
       const o = od.find((r) => String(r.d) === d) || {};
       const p = pd.find((r) => String(r.d) === d) || {};
       const s = sd.find((r) => String(r.d) === d) || {};
+      const q = qd.find((r) => String(r.d) === d) || {};
       const orderSales = Number(o.sales || 0);
-      const stockSales = Number(s.stock_sales || 0);
+      const stockSales = Number(s.stock_sales || 0) + Number(q.quick_sales || 0);
       return {
         date: d,
         orders: Number(o.orders || 0),

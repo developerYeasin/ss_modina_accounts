@@ -325,6 +325,43 @@ const registry = {
       user_name: S, datetime: T,
     },
   },
+  MapProduct: {
+    table: 'map_products',
+    sort: 'product_code',
+    search: ['product_code', 'product_name', 'company', 'colour'],
+    roles: { write: 'manager', delete: 'manager' },
+    fields: {
+      item_type: S, slide_category: S, product_code: S, product_name: S, company: S,
+      colour: S, quality: S, purchase_rate: N, sell_rate: N, bar_feet: N, glass_mm: S,
+    },
+  },
+
+  CurtainWallProduct: {
+    table: 'curtain_wall_products',
+    sort: 'company',
+    search: ['company', 'die_no', 'section_type'],
+    roles: { write: 'manager', delete: 'manager' },
+    fields: {
+      company: S, die_no: S, section_type: S, inch: N, size_mm: S, thickness: S, nose: S,
+      bar_ft: N, price_silver: N, price_bronze: N, price_black: N, price_ss: N, price_pc: N,
+      price_golden: N, price_wooden: N,
+    },
+  },
+
+  CurtainWallHardware: {
+    table: 'curtain_wall_hardware',
+    sort: 'item_key',
+    search: ['item_key', 'item_name'],
+    roles: { write: 'manager', delete: 'manager' },
+    fields: { item_key: S, item_name: S, unit: S, rate: N, pack_qty: N },
+  },
+
+  QuickSale: {
+    table: 'quick_sales',
+    sort: '-date',
+    search: ['item', 'description', 'notes'],
+    fields: { date: D, kind: S, item: S, description: S, amount: N, method: S, notes: S },
+  },
 };
 
 /** Case-insensitive lookup so /entities/order and /entities/Order both work. */

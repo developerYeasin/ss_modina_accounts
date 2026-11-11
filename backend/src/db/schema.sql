@@ -627,3 +627,84 @@ CREATE TABLE IF NOT EXISTS party_txns (
   INDEX idx_partytxn_date (date),
   CONSTRAINT fk_partytxn_party FOREIGN KEY (party_id) REFERENCES parties(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------- ম্যাপ ক্যালকুলেটর: Product DB ----------
+-- item_type: profile (থাই প্রোফাইল, sell_rate = প্রতি ফুট) | hardware (purchase_rate) | glass (purchase_rate = প্রতি Sq.Ft)
+-- slide_category: profile → 3inch | 4inch | 4inch_net | net | thaiCeiling | powderCode
+--                 hardware → slLock | mohiyer | rover | screws | halfScrew | slWheel | net | netWheel | netAngle | netRover | rivets | thaiCeiling
+CREATE TABLE IF NOT EXISTS map_products (
+  id             CHAR(24) NOT NULL PRIMARY KEY,
+  item_type      VARCHAR(20) NOT NULL DEFAULT 'profile',
+  slide_category VARCHAR(40) NULL,
+  product_code   VARCHAR(80) NULL,
+  product_name   VARCHAR(190) NULL,
+  company        VARCHAR(120) NULL,
+  colour         VARCHAR(60) NULL,
+  quality        VARCHAR(60) NULL,
+  purchase_rate  DECIMAL(14,2) NOT NULL DEFAULT 0,
+  sell_rate      DECIMAL(14,2) NULL,
+  bar_feet       DECIMAL(8,2) NULL,
+  glass_mm       VARCHAR(30) NULL,
+  created_date  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_date  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  created_by_id CHAR(24) NULL,
+  INDEX idx_mapprod_type (item_type),
+  INDEX idx_mapprod_code (product_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------- কার্টেন ওয়াল প্রোডাক্ট (ডাই) ----------
+-- section_type: half | sbit | dbit | angle ; price_* = এক বারের দাম (bar_ft ফুট)
+CREATE TABLE IF NOT EXISTS curtain_wall_products (
+  id            CHAR(24) NOT NULL PRIMARY KEY,
+  company       VARCHAR(120) NOT NULL,
+  die_no        VARCHAR(60) NOT NULL,
+  section_type  VARCHAR(20) NOT NULL DEFAULT 'half',
+  inch          DECIMAL(6,2) NOT NULL DEFAULT 0,
+  size_mm       VARCHAR(60) NULL,
+  thickness     VARCHAR(30) NULL,
+  nose          VARCHAR(30) NULL,
+  bar_ft        DECIMAL(8,2) NOT NULL DEFAULT 21,
+  price_silver  DECIMAL(14,2) NOT NULL DEFAULT 0,
+  price_bronze  DECIMAL(14,2) NOT NULL DEFAULT 0,
+  price_black   DECIMAL(14,2) NOT NULL DEFAULT 0,
+  price_ss      DECIMAL(14,2) NOT NULL DEFAULT 0,
+  price_pc      DECIMAL(14,2) NOT NULL DEFAULT 0,
+  price_golden  DECIMAL(14,2) NOT NULL DEFAULT 0,
+  price_wooden  DECIMAL(14,2) NOT NULL DEFAULT 0,
+  created_date  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_date  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  created_by_id CHAR(24) NULL,
+  INDEX idx_cwprod_company (company)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- কার্টেন ওয়াল হার্ডওয়্যার/টেপ/গাম রেট — item_key: clamp | royalBolt | screw | rivet | masking | notan | gum
+-- টেপ (masking/notan): rate = এক রোলের দাম, pack_qty = এক রোলে কত ফুট
+CREATE TABLE IF NOT EXISTS curtain_wall_hardware (
+  id         CHAR(24) NOT NULL PRIMARY KEY,
+  item_key   VARCHAR(30) NOT NULL,
+  item_name  VARCHAR(120) NULL,
+  unit       VARCHAR(20) NULL,
+  rate       DECIMAL(14,2) NOT NULL DEFAULT 0,
+  pack_qty   DECIMAL(10,2) NOT NULL DEFAULT 1,
+  created_date  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_date  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  created_by_id CHAR(24) NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------- খুচরা / তাৎক্ষণিক বিক্রি ও কেনা (মেমো ছাড়া, নগদ) ----------
+-- kind: sale (টাকা ঢুকল) | purchase (টাকা গেল)
+CREATE TABLE IF NOT EXISTS quick_sales (
+  id          CHAR(24) NOT NULL PRIMARY KEY,
+  date        DATE NOT NULL,
+  kind        VARCHAR(20) NOT NULL DEFAULT 'sale',
+  item        VARCHAR(80) NULL,
+  description VARCHAR(255) NULL,
+  amount      DECIMAL(14,2) NOT NULL DEFAULT 0,
+  method      VARCHAR(30) NOT NULL DEFAULT 'Cash',
+  notes       TEXT NULL,
+  created_date  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_date  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  created_by_id CHAR(24) NULL,
+  INDEX idx_quick_date (date),
+  INDEX idx_quick_kind (kind)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

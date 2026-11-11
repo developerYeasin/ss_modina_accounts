@@ -46,6 +46,12 @@ const Sales = lazy(() => import('@/pages/Sales'));
 const Dues = lazy(() => import('@/pages/Dues'));
 const Parties = lazy(() => import('@/pages/Parties'));
 const PartyDetail = lazy(() => import('@/pages/PartyDetail'));
+const QuickSales = lazy(() => import('@/pages/QuickSales'));
+const WindowCalculator = lazy(() => import('@/pages/WindowCalculator'));
+const CurtainWallCalculator = lazy(() => import('@/pages/CurtainWallCalculator'));
+const CeilingCalculator = lazy(() => import('@/pages/CeilingCalculator'));
+const MapProducts = lazy(() => import('@/pages/MapProducts'));
+const CurtainWallProducts = lazy(() => import('@/pages/CurtainWallProducts'));
 
 export default function App() {
   
@@ -121,6 +127,12 @@ export default function App() {
             <Route path="dues" element={<Dues />} />
             <Route path="parties" element={<Parties />} />
             <Route path="parties/:id" element={<PartyDetail />} />
+            <Route path="quick-sales" element={<QuickSales />} />
+            <Route path="calc/window" element={<WindowCalculator />} />
+            <Route path="calc/curtain-wall" element={<CurtainWallCalculator />} />
+            <Route path="calc/ceiling" element={<CeilingCalculator />} />
+            <Route path="calc/products" element={<MapProducts />} />
+            <Route path="calc/curtain-wall-products" element={<CurtainWallProducts />} />
 
             <Route path="quotations" element={<Quotations />} />
             <Route path="quotations/new" element={<QuotationForm />} />

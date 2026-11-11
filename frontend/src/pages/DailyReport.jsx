@@ -40,9 +40,17 @@ function cashLines(data) {
       label: t.party_name, detail: t.description,
       amount: num(t.type === 'receive_cash' ? t.amount : t.cash_amount), to: `/parties/${t.party_id}`,
     })),
+    ...(data.quick_sales || []).filter((q) => q.kind === 'sale').map((q) => ({
+      id: `q-${q.id}`, head: 'খুচরা বিক্রি', label: q.item || 'নগদ বিক্রি',
+      detail: q.description, amount: num(q.amount), to: '/quick-sales',
+    })),
   ];
 
   const expense = [
+    ...(data.quick_sales || []).filter((q) => q.kind === 'purchase').map((q) => ({
+      id: `q-${q.id}`, head: 'খুচরা কেনা', label: q.item || 'নগদ কেনা',
+      detail: q.description, amount: num(q.amount), to: '/quick-sales',
+    })),
     ...(data.party_txns || []).filter((t) => t.type === 'pay_cash' || (t.type === 'take_goods' && num(t.cash_amount) > 0)).map((t) => ({
       id: `pt-${t.id}`, head: t.type === 'pay_cash' ? 'পার্টিকে টাকা দিলাম' : 'পার্টি থেকে মাল — নগদ',
       label: t.party_name, detail: t.description,

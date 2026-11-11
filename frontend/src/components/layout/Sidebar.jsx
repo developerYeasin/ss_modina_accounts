@@ -3,6 +3,7 @@ import {
   LayoutDashboard, ClipboardList, Users, CalendarDays, BarChart3, Receipt,
   ShoppingCart, Truck, HandCoins, Boxes, Tags, Wallet, FileText, TrendingUp, AlertCircle,
   Settings as SettingsIcon, UserCog, Crown, Landmark, ArrowLeftRight, Wallet2, Store,
+  Zap, Ruler, LayoutGrid, Home, Database, Package,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSettings } from '@/hooks/useSettings';
@@ -13,10 +14,20 @@ export const MAIN_NAV = [
   { to: '/', label: 'ড্যাশবোর্ড', icon: LayoutDashboard },
   { to: '/orders', label: 'অর্ডার', icon: ClipboardList },
   { to: '/customers', label: 'কাস্টমার', icon: Users },
+  { to: '/quick-sales', label: 'খুচরা বিক্রি (মেমো ছাড়া)', icon: Zap },
   { to: '/sales', label: 'বিক্রয়', icon: TrendingUp },
   { to: '/dues', label: 'বাকি খাতা', icon: AlertCircle },
   { to: '/accounts', label: 'দৈনিক রিপোর্ট', icon: CalendarDays },
   { to: '/reports', label: 'রিপোর্ট', icon: BarChart3 },
+];
+
+/** ম্যাপ ক্যালকুলেটর ও তাদের রেট। */
+export const CALC_NAV = [
+  { to: '/calc/window', label: 'জানালা ম্যাপ ক্যালকুলেটর', icon: Ruler },
+  { to: '/calc/curtain-wall', label: 'কার্টেন ওয়াল ক্যালকুলেটর', icon: LayoutGrid },
+  { to: '/calc/ceiling', label: 'সিলিং ম্যাপ ক্যালকুলেটর', icon: Home },
+  { to: '/calc/products', label: 'ম্যাপ Product DB', icon: Database },
+  { to: '/calc/curtain-wall-products', label: 'কার্টেন ওয়াল প্রোডাক্ট', icon: Package },
 ];
 
 export const MORE_NAV = [
@@ -88,6 +99,11 @@ export default function Sidebar({ onNavigate }) {
 
       <nav className="flex-1 space-y-1 overflow-y-auto p-3">
         {MAIN_NAV.map((item) => <NavItem key={item.to} {...item} onNavigate={onNavigate} />)}
+
+        <p className="px-3 pb-1 pt-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          ম্যাপ ক্যালকুলেটর
+        </p>
+        {CALC_NAV.map((item) => <NavItem key={item.to} {...item} onNavigate={onNavigate} />)}
 
         <p className="px-3 pb-1 pt-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           আরও
